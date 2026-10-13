@@ -7,6 +7,19 @@ model and one input layout, in which a row can be about a combination of
 diseases or a subgroup, crude or adjusted, and several rows can describe
 the same thing.
 
+## Errors and warnings
+
+* Every error a user can meet has a class beside `deconflate_error`. The
+  new class `deconflate_invalid_input` covers arguments, tables, rows and
+  input values that are not valid (an unknown disease, a negative standard
+  deviation, a missing table). Limits of the package (too many diseases for
+  the exact backend, the LP check or the cell-wise Shapley allocation; the
+  LP check without lpSolve) are `deconflate_unsupported`. When every method
+  of `compare_methods()` fails, or the baseline of a screen or a threshold
+  search cannot be used, the error has the class of the failure that caused
+  it. Rejected draws and failed scenarios caused by invalid inputs are
+  labelled `"invalid_input"` instead of `"error"`.
+
 ## Breaking changes: one model, one input layout
 
 * **One model.** The `method` argument is removed from `deconflate()`,

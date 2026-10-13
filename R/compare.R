@@ -64,7 +64,7 @@ compare_methods <- function(model, methods = NULL, event_model = FALSE, overall_
   }
   res <- list()
   undefined <- list()
-  failed <- character(0)
+  failed <- failed_type <- character(0)
   for (m in methods) {
     r <- tryCatch(withCallingHandlers(run_m(model, m, risk$value),
                                       deconflate_nonconvergence = function(w) {
@@ -73,16 +73,20 @@ compare_methods <- function(model, methods = NULL, event_model = FALSE, overall_
                   deconflate_error = function(e) e)
     if (inherits(r, "condition")) {
       failed[m] <- conditionMessage(r)
+      failed_type[m] <- condition_type(r)
     } else if (!result_is_finite(r)) {
       # Kept for inspection in `undefined`, but not presented as an estimate.
       failed[m] <- sprintf("undefined: non-finite adjusted values (%s)", nonfinite_diseases(r))
+      failed_type[m] <- "nonfinite"
       undefined[[m]] <- r
     } else {
       res[[m]] <- r
     }
   }
   if (!length(res)) {
-    cm_abort(sprintf("All methods failed: %s", paste(names(failed), failed, sep = ": ", collapse = "; ")))
+    # (Of the kind of the first failure, usually the model's.)
+    cm_abort(sprintf("All methods failed: %s", paste(names(failed), failed, sep = ": ", collapse = "; ")),
+             class = type_class(failed_type[[1]]))
   }
   ok <- names(res)
   # One row per term of the model's result (diseases first).

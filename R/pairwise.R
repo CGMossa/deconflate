@@ -59,7 +59,7 @@ association_to_joint <- function(measure, value, p1, p2) {
     RD = (value * (1 - p2) + p1) * p2,
     prevalence = value * p2,
     phi = p1 * p2 + value * sqrt(p1 * (1 - p1) * p2 * (1 - p2)),
-    cm_abort(sprintf("Cannot convert measure '%s' to a joint probability.", measure))
+    cm_abort(sprintf("Cannot convert measure '%s' to a joint probability.", measure), class = "deconflate_invalid_input")
   )
   lo <- max(0, p1 + p2 - 1)
   hi <- min(p1, p2)

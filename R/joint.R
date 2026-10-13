@@ -136,7 +136,7 @@ fit_joint_at <- function(model, tol = 1e-10, max_iter = 10000L, max_diseases = 2
     return(out)
   }
   if (n > max_diseases) {
-    cm_abort(sprintf("%d diseases give 2^%d cells; use backend = \"sampled\", or increase `max_diseases` if intended.", n, n))
+    cm_abort(sprintf("%d diseases give 2^%d cells; use backend = \"sampled\", or increase `max_diseases` if intended.", n, n), class = "deconflate_unsupported")
   }
   cells <- disease_cells(n)
   colnames(cells) <- ids
@@ -279,7 +279,7 @@ fit_joint_sampled <- function(model, ids, p, cons, targets, tol, max_iter, n_sam
   if (!is.null(seed)) set.seed(seed)
   n <- length(ids)
   n_chains <- as.integer(n_chains)
-  if (n_chains < 10L) cm_abort("`n_chains` must be at least 10.")
+  if (n_chains < 10L) cm_abort("`n_chains` must be at least 10.", class = "deconflate_invalid_input")
   i1 <- match(cons$disease1, ids)
   i2 <- match(cons$disease2, ids)
   p11 <- cons$p11
@@ -448,10 +448,10 @@ fit_joint_sampled <- function(model, ids, p, cons, targets, tol, max_iter, n_sam
 # the same order, the same disease probabilities and association rows, and
 # converged. Impact-only changes do not invalidate a joint.
 validate_joint <- function(joint, model, pool = "random") {
-  if (!inherits(joint, "cm_joint")) cm_abort("`joint` must come from fit_joint().")
+  if (!inherits(joint, "cm_joint")) cm_abort("`joint` must come from fit_joint().", class = "deconflate_invalid_input")
   ids <- model$diseases$disease
   stale <- function(why) {
-    cm_abort(sprintf("The supplied joint distribution does not match the model (%s); refit it with fit_joint().", why))
+    cm_abort(sprintf("The supplied joint distribution does not match the model (%s); refit it with fit_joint().", why), class = "deconflate_invalid_input")
   }
   if (!identical(joint$diseases, ids)) stale("different diseases or order")
   if (!isTRUE(joint$converged)) {
@@ -478,7 +478,7 @@ validate_joint <- function(joint, model, pool = "random") {
 #'   decreasing probability.
 #' @export
 combination_probs <- function(joint, min_prob = 0) {
-  if (!inherits(joint, "cm_joint")) cm_abort("`joint` must come from fit_joint().")
+  if (!inherits(joint, "cm_joint")) cm_abort("`joint` must come from fit_joint().", class = "deconflate_invalid_input")
   out <- as.data.frame(joint$cells)
   out$n_diseases <- rowSums(joint$cells)
   out$prob <- joint$prob

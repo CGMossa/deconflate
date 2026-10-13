@@ -33,7 +33,7 @@
 #' m <- c(d1 = 0.02, d2 = 0.04, d3 = 0.06)
 #' shapley_by_cell(j, loss_multiplicative(m))
 shapley_by_cell <- function(joint, loss, max_present = Inf) {
-  if (!inherits(joint, "cm_joint")) cm_abort("`joint` must come from fit_joint().")
+  if (!inherits(joint, "cm_joint")) cm_abort("`joint` must come from fit_joint().", class = "deconflate_invalid_input")
   ids <- joint$diseases
   n <- length(ids)
   phi <- stats::setNames(numeric(n), ids)
@@ -44,7 +44,7 @@ shapley_by_cell <- function(joint, loss, max_present = Inf) {
   # Every subset of the diseases present in a combination is itself a
   # combination, so the loss is evaluated at most once per combination
   # (cached by its binary code) rather than once per subset and cell.
-  if (n > 52L) cm_abort("Cell-wise Shapley allocation supports at most 52 diseases.")
+  if (n > 52L) cm_abort("Cell-wise Shapley allocation supports at most 52 diseases.", class = "deconflate_unsupported")
   bits <- 2^(seq_len(n) - 1)
   # Small n: a vector indexed by code; large n (sampled joints): a hash.
   if (n <= 20L) {
@@ -142,10 +142,10 @@ NULL
 #' @rdname loss_functions
 #' @export
 loss_additive <- function(main, terms = NULL) {
-  if (is.null(names(main))) cm_abort("`main` must be named by disease id.")
+  if (is.null(names(main))) cm_abort("`main` must be named by disease id.", class = "deconflate_invalid_input")
   for (t in terms) {
     if (is.null(t$diseases) || length(t$diseases) < 2L || is.null(t$value)) {
-      cm_abort("Each term needs `diseases` (two or more ids) and `value`.")
+      cm_abort("Each term needs `diseases` (two or more ids) and `value`.", class = "deconflate_invalid_input")
     }
   }
   function(x) {
@@ -158,6 +158,6 @@ loss_additive <- function(main, terms = NULL) {
 #' @rdname loss_functions
 #' @export
 loss_multiplicative <- function(main) {
-  if (is.null(names(main))) cm_abort("`main` must be named by disease id.")
+  if (is.null(names(main))) cm_abort("`main` must be named by disease id.", class = "deconflate_invalid_input")
   function(x) 1 - prod((1 - main)^x[names(main)])
 }

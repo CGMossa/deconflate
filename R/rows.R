@@ -9,13 +9,13 @@
 parse_members <- function(x, ids, where, col, required = TRUE) {
   m <- split_ids(x)
   if (!length(m)) {
-    if (required) cm_abort(sprintf("%s: `%s` is missing.", where, col))
+    if (required) cm_abort(sprintf("%s: `%s` is missing.", where, col), class = "deconflate_invalid_input")
     return(character(0))
   }
   unk <- setdiff(m, ids)
   if (length(unk)) cm_abort(sprintf("%s: unknown disease%s in `%s`: %s.", where,
-                                    if (length(unk) > 1L) "s" else "", col, paste(unk, collapse = ", ")))
-  if (anyDuplicated(m)) cm_abort(sprintf("%s: `%s` names a disease twice.", where, col))
+                                    if (length(unk) > 1L) "s" else "", col, paste(unk, collapse = ", ")), class = "deconflate_invalid_input")
+  if (anyDuplicated(m)) cm_abort(sprintf("%s: `%s` names a disease twice.", where, col), class = "deconflate_invalid_input")
   ids[ids %in% m]   # in the order of the diseases table
 }
 
@@ -37,11 +37,11 @@ parse_among <- function(x, ids, named, where) {
   }
   unk <- setdiff(c(pos, neg), ids)
   if (length(unk)) cm_abort(sprintf("%s: unknown disease%s in `among`: %s.", where,
-                                    if (length(unk) > 1L) "s" else "", paste(unk, collapse = ", ")))
-  if (anyDuplicated(c(pos, neg))) cm_abort(sprintf("%s: `among` names a disease twice.", where))
+                                    if (length(unk) > 1L) "s" else "", paste(unk, collapse = ", ")), class = "deconflate_invalid_input")
+  if (anyDuplicated(c(pos, neg))) cm_abort(sprintf("%s: `among` names a disease twice.", where), class = "deconflate_invalid_input")
   clash <- intersect(c(pos, neg), named)
   if (length(clash)) {
-    cm_abort(sprintf("%s: `among` names %s, which the row is about.", where, paste(clash, collapse = ", ")))
+    cm_abort(sprintf("%s: `among` names %s, which the row is about.", where, paste(clash, collapse = ", ")), class = "deconflate_invalid_input")
   }
   if (others) neg <- c(neg, setdiff(ids, c(named, pos, neg)))
   list(pos = ids[ids %in% pos], neg = ids[ids %in% neg], others = others,
@@ -56,7 +56,7 @@ parse_adjusted <- function(x, ids, exclude, where) {
   if (length(s) == 1L && tolower(s) == "all") {
     return(list(all = TRUE, diseases = setdiff(ids, exclude), other = character(0)))
   }
-  if (any(tolower(s) == "all")) cm_abort(sprintf("%s: `adjusted_for` is either 'all' or a list of names.", where))
+  if (any(tolower(s) == "all")) cm_abort(sprintf("%s: `adjusted_for` is either 'all' or a list of names.", where), class = "deconflate_invalid_input")
   # The row's own diseases (and its subgroup's, which are constant within
   # it) carry no adjustment.
   d <- setdiff(intersect(s, ids), exclude)
@@ -72,16 +72,16 @@ association_spec <- function(a, ids) {
   g <- parse_members(a$disease, ids, where, "disease")
   h <- parse_members(a$associated_with, ids, where, "associated_with", required = FALSE)
   if (length(intersect(g, h))) cm_abort(sprintf("%s: `disease` and `associated_with` share %s.", where,
-                                                paste(intersect(g, h), collapse = ", ")))
+                                                paste(intersect(g, h), collapse = ", ")), class = "deconflate_invalid_input")
   am <- parse_among(a$among, ids, c(g, h), where)
   adj <- parse_adjusted(a$adjusted_for, ids, c(g, h, am$pos, am$neg), where)
   m <- a$measure
   v <- a$value
   if (m != "prevalence" && !length(h)) {
-    cm_abort(sprintf("%s: measure %s needs `associated_with` (the comparison).", where, m))
+    cm_abort(sprintf("%s: measure %s needs `associated_with` (the comparison).", where, m), class = "deconflate_invalid_input")
   }
   if (m == "prevalence" && !length(h) && length(g) == 1L && !length(c(am$pos, am$neg))) {
-    cm_abort(sprintf("%s: the prevalence of one disease in the whole population belongs in the diseases table.", where))
+    cm_abort(sprintf("%s: the prevalence of one disease in the whole population belongs in the diseases table.", where), class = "deconflate_invalid_input")
   }
   adjusted <- length(adj$diseases) > 0L
   if (adjusted) {
@@ -92,10 +92,10 @@ association_spec <- function(a, ids) {
   }
   if (m == "OR_ratio") {
     if (length(g) != 1L || length(h) != 1L) {
-      cm_abort(sprintf("%s: OR_ratio needs one disease in `disease` and one in `associated_with`.", where))
+      cm_abort(sprintf("%s: OR_ratio needs one disease in `disease` and one in `associated_with`.", where), class = "deconflate_invalid_input")
     }
     if (!am$single) {
-      cm_abort(sprintf("%s: OR_ratio needs one disease in `among` (present, e.g. 'SCK', or absent, 'no SCK').", where))
+      cm_abort(sprintf("%s: OR_ratio needs one disease in `among` (present, e.g. 'SCK', or absent, 'no SCK').", where), class = "deconflate_invalid_input")
     }
     if (length(adj$diseases) || adj$all) {
       cm_abort(sprintf("%s: OR_ratio rows cannot be adjusted for other diseases.", where), class = "deconflate_unsupported")

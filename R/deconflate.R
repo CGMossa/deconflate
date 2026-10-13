@@ -188,7 +188,7 @@ deconflate <- function(model, ...) UseMethod("deconflate")
 
 #' @export
 deconflate.default <- function(model, ...) {
-  cm_abort("`model` must be created with cm_model() or cm_read_inputs().")
+  cm_abort("`model` must be created with cm_model() or cm_read_inputs().", class = "deconflate_invalid_input")
 }
 
 #' @rdname deconflate
@@ -247,9 +247,9 @@ retired_args <- function(dots) {
 # Additive or event impacts, as the call says? A mismatch is an error.
 check_event_model <- function(model, event_model) {
   if (!is.logical(event_model) || length(event_model) != 1L || is.na(event_model)) {
-    cm_abort("`event_model` must be TRUE or FALSE.")
+    cm_abort("`event_model` must be TRUE or FALSE.", class = "deconflate_invalid_input")
   }
-  if (is.null(model$impacts)) cm_abort("The model has no impacts to adjust.")
+  if (is.null(model$impacts)) cm_abort("The model has no impacts to adjust.", class = "deconflate_invalid_input")
   kind <- impact_kind(model$impacts)
   if (event_model && kind != "event") {
     cm_abort("event_model = TRUE needs event impacts: an impact table with a measure column (HR, rate_ratio, RR, OR or RD; see ?cm_impacts).",
@@ -470,9 +470,9 @@ unknown_pairs_table <- function(model, joint) {
 #' @export
 attribute_burden <- function(result) {
   if (inherits(result, "cm_event_result")) {
-    if (is.null(result$attributable$by_disease)) cm_abort("The result has no allocation of the attributable risk.")
+    if (is.null(result$attributable$by_disease)) cm_abort("The result has no allocation of the attributable risk.", class = "deconflate_invalid_input")
     return(result$attributable$by_disease)
   }
-  if (!inherits(result, "cm_result")) cm_abort("`result` must come from deconflate().")
+  if (!inherits(result, "cm_result")) cm_abort("`result` must come from deconflate().", class = "deconflate_invalid_input")
   result$contributions
 }

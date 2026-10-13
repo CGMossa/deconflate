@@ -55,10 +55,10 @@ check_feasibility <- function(model, method = c("auto", "triples", "lp"),
   lp_res <- NULL
   if (run_lp) {
     if (!requireNamespace("lpSolve", quietly = TRUE)) {
-      cm_abort("method = 'lp' requires the lpSolve package: install.packages('lpSolve').")
+      cm_abort("method = 'lp' requires the lpSolve package: install.packages('lpSolve').", class = "deconflate_unsupported")
     }
     if (length(ids) > max_lp_diseases) {
-      cm_abort(sprintf("The LP check is limited to %d diseases (increase `max_lp_diseases`).", max_lp_diseases))
+      cm_abort(sprintf("The LP check is limited to %d diseases (increase `max_lp_diseases`).", max_lp_diseases), class = "deconflate_unsupported")
     }
     lp_res <- feasibility_lp(model, pt, P, tol)
   }

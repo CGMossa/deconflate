@@ -19,7 +19,7 @@
 adjust_event <- function(model, overall_risk, joint, warn = TRUE, allocate = TRUE, start = NULL,
                          frozen_se = NULL) {
   imp <- model$impacts
-  if (is.null(imp)) cm_abort("The model has no impacts to adjust.")
+  if (is.null(imp)) cm_abort("The model has no impacts to adjust.", class = "deconflate_invalid_input")
   if (impact_kind(imp) != "event") {
     cm_abort("event_model = TRUE needs event impacts: an impact table with a measure column (HR, rate_ratio, RR, OR or RD).",
              class = "deconflate_unsupported")
