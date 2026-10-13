@@ -64,9 +64,11 @@ ratios, and risks are proportions of animals over the period.
 \item Under additive impacts, the crude impact of disease \code{i} satisfies
 \verb{m_raw[i] = m[i] + sum_k E[k, i] * m[k]} exactly.
 \item Errors have classes \code{deconflate_infeasible}, \code{deconflate_singular},
-\code{deconflate_nonconvergence}, \code{deconflate_unsupported} and
-\code{deconflate_nonfinite} (all also \code{deconflate_error}); problems found
-by \code{\link[=cm_read_inputs]{cm_read_inputs()}} have class \code{deconflate_input_problems}. Warning classes
+\code{deconflate_nonconvergence}, \code{deconflate_unsupported},
+\code{deconflate_nonfinite} and \code{deconflate_invalid_input} (an argument,
+table, row or input value that is not valid; all also
+\code{deconflate_error}); problems found by \code{\link[=cm_read_inputs]{cm_read_inputs()}} have class
+\code{deconflate_input_problems} (also \code{deconflate_invalid_input}). Warning classes
 include \code{deconflate_sign_change}, \code{deconflate_nonconvergence} and
 \code{deconflate_nonfinite_warning} (all also \code{deconflate_warning}).
 }

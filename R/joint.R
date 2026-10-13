@@ -102,8 +102,8 @@ fit_joint <- function(model, tol = 1e-10, max_iter = 10000L, max_diseases = 20L,
                       burn_in = 50L, fit_iter = 300L, calibrate = TRUE, seed = NULL,
                       start = NULL, pool = c("random", "fixed")) {
   check_population(model)
-  backend <- match.arg(backend)
-  pool <- match.arg(pool)
+  backend <- cm_match_arg(backend)
+  pool <- cm_match_arg(pool)
   fit_joint_at(model, tol = tol, max_iter = max_iter, max_diseases = max_diseases, backend = backend,
                n_samples = n_samples, n_chains = n_chains, burn_in = burn_in, fit_iter = fit_iter,
                calibrate = calibrate, seed = seed, start = start, pool = pool)

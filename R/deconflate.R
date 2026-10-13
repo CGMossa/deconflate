@@ -198,8 +198,8 @@ deconflate.cm_model <- function(model, event_model = FALSE, overall_risk = NULL,
                                 pool = c("random", "fixed"), joint = NULL, warn = TRUE, ...) {
   dots <- list(...)
   retired_args(dots)
-  sampling <- match.arg(sampling)
-  pool <- match.arg(pool)
+  sampling <- cm_match_arg(sampling)
+  pool <- cm_match_arg(pool)
   check_draw_args(n_draws, seed, sampling, lhs_replicates)
   n_draws <- as.integer(n_draws)
   check_event_model(model, event_model)

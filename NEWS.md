@@ -7,6 +7,15 @@ model and one input layout, in which a row can be about a combination of
 diseases or a subgroup, crude or adjusted, and several rows can describe
 the same thing.
 
+## Errors and warnings
+
+* An invalid choice for an argument (e.g. `sampling = "x"` in
+  `deconflate()`, `pool`, `backend`, `outcome`, `conclusion`) is an error of
+  class `deconflate_invalid_input` that names the argument, instead of the
+  plain R error of `match.arg()`. Partial matching works as before. The
+  problems found by `cm_read_inputs()` (class `deconflate_input_problems`)
+  are also `deconflate_invalid_input`.
+
 ## Breaking changes: one model, one input layout
 
 * **One model.** The `method` argument is removed from `deconflate()`,

@@ -105,8 +105,8 @@ cm_threshold <- function(model, input, range, conclusion = c("rank", "sign", "to
   dots <- list(...)
   retired_args(dots)
   st <- sens_setup(model, event_model, overall_risk)
-  conclusion <- match.arg(conclusion)
-  by <- match.arg(by)
+  conclusion <- cm_match_arg(conclusion)
+  by <- cm_match_arg(by)
   if (!is.character(input) || length(input) != 1L || is.na(input)) {
     cm_abort("`input` must be a single string such as \"assoc:d1:d2\".")
   }

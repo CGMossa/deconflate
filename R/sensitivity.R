@@ -448,7 +448,7 @@ screen_three_way <- function(model, ratios = c(0.5, 2), triples = NULL, event_mo
 sensitivity_oat <- function(model, event_model = FALSE, overall_risk = NULL,
                             variation = 0.2, inputs = c("prob", "assoc", "impact", "risk"), ...) {
   st <- sens_setup(model, event_model, overall_risk, list(...))
-  inputs <- match.arg(inputs, several.ok = TRUE)
+  inputs <- cm_match_arg(inputs, several_ok = TRUE)
   base <- burden_metric(check_baseline(run_quiet(model, st)))
   vals <- model_inputs(model)
   if (event_model) vals <- c(vals, risk = st$risk)

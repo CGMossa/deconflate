@@ -120,7 +120,7 @@ cm_read_inputs <- function(diseases, associations = NULL, impacts, ...) {
   pr <- chk$problems
   if (any(pr$severity == "error")) {
     cm_abort(format_problems(pr[pr$severity == "error", , drop = FALSE]),
-             class = "deconflate_input_problems")
+             class = c("deconflate_input_problems", "deconflate_invalid_input"))
   }
   if (nrow(pr)) message(format_problems(pr))
   m <- chk$model

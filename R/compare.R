@@ -48,7 +48,7 @@ compare_methods <- function(model, methods = NULL, event_model = FALSE, overall_
   check_event_model(model, event_model)
   risk <- check_overall_risk(overall_risk, event_model)
   all_m <- if (event_model) c("published", "first_order", "deconflate") else c("published", "deconflate")
-  methods <- unique(match.arg(methods %||% all_m, all_m, several.ok = TRUE))
+  methods <- unique(cm_match_arg(methods %||% all_m, all_m, several_ok = TRUE, name = "methods"))
   check_draw_args(n_draws, seed)
   dots <- list(...)
   pool <- dots$pool %||% "random"

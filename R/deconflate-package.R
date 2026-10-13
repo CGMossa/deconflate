@@ -53,9 +53,11 @@
 #' * Under additive impacts, the crude impact of disease `i` satisfies
 #'   `m_raw[i] = m[i] + sum_k E[k, i] * m[k]` exactly.
 #' * Errors have classes `deconflate_infeasible`, `deconflate_singular`,
-#'   `deconflate_nonconvergence`, `deconflate_unsupported` and
-#'   `deconflate_nonfinite` (all also `deconflate_error`); problems found
-#'   by [cm_read_inputs()] have class `deconflate_input_problems`. Warning classes
+#'   `deconflate_nonconvergence`, `deconflate_unsupported`,
+#'   `deconflate_nonfinite` and `deconflate_invalid_input` (an argument,
+#'   table, row or input value that is not valid; all also
+#'   `deconflate_error`); problems found by [cm_read_inputs()] have class
+#'   `deconflate_input_problems` (also `deconflate_invalid_input`). Warning classes
 #'   include `deconflate_sign_change`, `deconflate_nonconvergence` and
 #'   `deconflate_nonfinite_warning` (all also `deconflate_warning`).
 #'

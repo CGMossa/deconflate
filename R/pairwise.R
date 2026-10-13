@@ -90,7 +90,7 @@ association_to_joint <- function(measure, value, p1, p2) {
 #' @export
 pair_tables <- function(model, pool = c("random", "fixed")) {
   check_population(model)
-  pair_tables_at(model, match.arg(pool))
+  pair_tables_at(model, cm_match_arg(pool))
 }
 
 # pair_tables() with the pooling of the draws (frozen weights, between-study

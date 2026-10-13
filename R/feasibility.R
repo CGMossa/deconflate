@@ -43,7 +43,7 @@
 check_feasibility <- function(model, method = c("auto", "triples", "lp"),
                               max_lp_diseases = 14L, tol = 1e-9) {
   check_population(model)
-  method <- match.arg(method)
+  method <- cm_match_arg(method)
   ids <- model$diseases$disease
   P <- stats::setNames(model$diseases$prob, ids)
   pt <- pair_tables(model)

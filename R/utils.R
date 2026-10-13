@@ -10,6 +10,7 @@
 #   deconflate_nonconvergence  a numerical procedure did not converge
 #   deconflate_unsupported     an estimand/method combination that is not supported
 #   deconflate_nonfinite       non-finite results
+#   deconflate_invalid_input   an argument, table, row or input value that is not valid
 cm_abort <- function(msg, class = NULL) {
   stop(errorCondition(msg, class = c(class, "deconflate_error"), call = NULL))
 }
@@ -51,6 +52,17 @@ check_choices <- function(x, choices, name) {
                      paste(sprintf("'%s'", choices), collapse = ", ")))
   }
   invisible(x)
+}
+
+# match.arg() for the arguments of exported functions, with an invalid choice
+# as a classed error that names the argument. Without `choices`, they are the
+# argument's default in the calling function, as for match.arg().
+cm_match_arg <- function(arg, choices, several_ok = FALSE, name = deparse(substitute(arg))) {
+  if (missing(choices)) choices <- eval(formals(sys.function(sys.parent()))[[name]], envir = parent.frame())
+  tryCatch(match.arg(arg, choices, several.ok = several_ok), error = function(e) {
+    cm_abort(sprintf("`%s` must be %s: %s.", name, if (several_ok) "one or more of" else "one of",
+                     paste(sprintf("'%s'", choices), collapse = ", ")), class = "deconflate_invalid_input")
+  })
 }
 
 # Disease ids are used in keys such as "assoc:d1:d2" and in "a; b" lists.
