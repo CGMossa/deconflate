@@ -344,11 +344,13 @@ ratio_target <- function(s, v, ctx) {
   lo <- max(0, pgS + phS - pS, pghT - a, pghT - b)
   hi <- min(pgS, phS, pghT, pghT - (a + b - mm))
   eps <- 1e-12 * max(hi - lo, 1e-300)
-  if (!(hi - lo > 2 * eps)) {
+  infeasible <- function(e = NULL) {
     cm_abort(sprintf("%s: no joint distribution has this odds ratio ratio with the other inputs.", s$where),
              class = "deconflate_infeasible")
   }
-  stats::uniroot(f, c(lo + eps, hi - eps), tol = 1e-15, maxiter = 1000L)$root
+  if (!(hi - lo > 2 * eps)) infeasible()
+  # (No root in the interval: the ratio is beyond what the other inputs allow.)
+  tryCatch(stats::uniroot(f, c(lo + eps, hi - eps), tol = 1e-15, maxiter = 1000L)$root, error = infeasible)
 }
 
 # The value of an OR_ratio row in its stored form (among S present).

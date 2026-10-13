@@ -7,6 +7,18 @@ model and one input layout, in which a row can be about a combination of
 diseases or a subgroup, crude or adjusted, and several rows can describe
 the same thing.
 
+## Errors and warnings
+
+* Failures inside base R's root finding and linear solves are classed
+  errors, so draws, `compare_methods()` and the screens handle them like
+  any other failure instead of stopping. An `OR_ratio` row with a value
+  that the other inputs do not allow gave an unclassed error from
+  `uniroot()`, which stopped `deconflate()` with draws altogether; it is now
+  `deconflate_infeasible` (the draw is rejected). The baseline hazard of
+  non-finite hazard multipliers is `deconflate_nonfinite`, and a singular
+  system in the first-order event approximation of `compare_methods()` is
+  `deconflate_singular`.
+
 ## Breaking changes: one model, one input layout
 
 * **One model.** The `method` argument is removed from `deconflate()`,

@@ -96,6 +96,13 @@ impact_row_se <- function(model, specs, scale = function(v) v) {
   vapply(specs, function(s) row_se(row_dist(model, "impacts", s$row), scale), numeric(1))
 }
 
+# solve(A, y) for a square system, with a singular system as a classed error.
+solve_exact <- function(A, y) {
+  tryCatch(solve(A, y), error = function(e) {
+    cm_abort(sprintf("Could not solve the adjustment equations: %s", conditionMessage(e)), class = "deconflate_singular")
+  })
+}
+
 # Solve A theta = y: exactly (rows determine the unknowns exactly), or by
 # weighted least squares with weights 1 / se^2, rows with se = 0 being exact
 # constraints. `labels`: row labels for messages; `terms`: unknowns.
@@ -115,9 +122,7 @@ solve_rows <- function(A, y, se, labels, terms, check = TRUE) {
              class = "deconflate_infeasible")
   }
   if (m == k) {
-    theta <- tryCatch(solve(A, y), error = function(e) {
-      cm_abort(sprintf("Could not solve the adjustment equations: %s", conditionMessage(e)), class = "deconflate_singular")
-    })
+    theta <- solve_exact(A, y)
   } else if (m < k) {
     theta <- qr.coef(qr(A), y)
     theta[!is.finite(theta)] <- 0

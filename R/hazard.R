@@ -281,7 +281,7 @@ adjust_event_pairwise <- function(model, method = c("first_order", "published"),
     adj <- 1 + ifelse(m == 0, 0, m^2 / (m + conf))
     resid <- max(abs(as.vector(A %*% (adj - 1)) - m))
   } else {
-    beta <- as.vector(solve(A, log(v)))
+    beta <- as.vector(solve_exact(A, log(v)))
     adj <- exp(beta)
     resid <- max(abs(as.vector(A %*% beta) - log(v)))
   }
@@ -351,9 +351,17 @@ baseline_hazard <- function(mult, prob, overall_risk) {
   keep <- prob > 0
   mult <- mult[keep]
   prob <- prob[keep]
+  if (!all(is.finite(mult) & mult > 0)) {
+    cm_abort("The hazard multipliers are not all finite and positive, so the baseline hazard is undefined.",
+             class = "deconflate_nonfinite")
+  }
   hi <- -log(1 - overall_risk) / min(mult)
-  stats::uniroot(function(h) sum(prob * (1 - exp(-h * mult))) - overall_risk,
-                 c(0, hi), extendInt = "upX", tol = 1e-14)$root
+  tryCatch(stats::uniroot(function(h) sum(prob * (1 - exp(-h * mult))) - overall_risk,
+                          c(0, hi), extendInt = "upX", tol = 1e-14)$root,
+           error = function(e) {
+             cm_abort(sprintf("Could not find the baseline hazard: %s", conditionMessage(e)),
+                      class = "deconflate_nonconvergence")
+           })
 }
 
 # An event estimate on its own scale: log for ratios, the difference for RD.
