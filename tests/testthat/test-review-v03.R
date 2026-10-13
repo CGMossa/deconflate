@@ -4,16 +4,12 @@
 # Reference values: inst/validation/reference_v030.py.
 
 t2_ids <- c("d1", "d2", "d3")
-t2_pop <- function(three_way = NULL) {
-  cm_population(cm_diseases(t2_ids, c(0.10, 0.15, 0.20)),
-                cm_associations(c("d1", "d1", "d2"), c("d2", "d3", "d3"), c(2, 1, 3)),
-                three_way = three_way)
-}
+t2_pop <- function(extra = NULL) supp_population(extra)
 t2_model <- function(values) cm_model(t2_pop(), cm_impacts(t2_ids, values))
 # A model where the published approximation divides by zero for d1:
 # b1 = m1^2 / (m1 + A12 m2 + A13 m3) with m = (-A12, 1, 0).
 t2_pole_model <- function() {
-  e <- deconflate(t2_model(c(1, 1, 1)))$conflation$A["d1", "d2"]
+  e <- deconflate(t2_model(c(1, 1, 1)))$conflation$A[1, "d2"]
   t2_model(c(-e, 1, 0))
 }
 
@@ -46,18 +42,21 @@ test_that("the stand-alone Monte Carlo and reweighting functions are gone", {
   expect_false("proposal" %in% names(formals(deconflate.cm_model)))
   expect_false("missing_associations" %in% names(formals(cm_population)))
   expect_false("missing_associations" %in% names(formals(cm_model)))
+  # Retired in 0.4 (item 4): the three-way and interaction constructors.
+  for (f in c("cm_three_way", "cm_interactions")) expect_false(f %in% ex, info = f)
+  expect_false("method" %in% names(formals(deconflate.cm_model)))
 })
 
 # ---- 2. Undefined results are never successful estimates ----------------------
 
 test_that("compare_methods reports an undefined published result as failed", {
   pm <- t2_pole_model()
-  expect_true(is.infinite(adjust_impacts(pm, method = "published", warn = FALSE)$adjusted$adjusted[1]))
-  cmp <- compare_methods(pm, methods = c("published", "simultaneous"))
-  expect_equal(cmp$methods, "simultaneous")
+  expect_true(is.infinite(adjust_published(pm)$adjusted$adjusted[1]))
+  cmp <- compare_methods(pm, methods = c("published", "deconflate"))
+  expect_equal(cmp$methods, "deconflate")
   expect_match(cmp$failed[["published"]], "^undefined")
   expect_s3_class(cmp$undefined$published, "cm_result")
-  expect_true(all(is.finite(cmp$impacts$simultaneous)))
+  expect_true(all(is.finite(cmp$impacts$deconflate)))
   expect_false("published" %in% names(cmp$impacts))
 })
 
@@ -66,7 +65,7 @@ test_that("sensitivity tools report undefined scenarios with a reason", {
   # and it is not a method of deconflate(), so the scenario helpers are
   # tested directly on its result.
   pm <- t2_pole_model()
-  pub <- adjust_impacts(pm, method = "published", warn = FALSE)
+  pub <- adjust_published(pm)
   expect_true(failed_run(pub))
   sm <- scenario_metric(pub)
   expect_null(sm$met)
@@ -83,10 +82,10 @@ test_that("sensitivity tools report undefined scenarios with a reason", {
   # A screen's baseline must be a finite estimate.
   expect_error(check_baseline(pub), class = "deconflate_nonfinite")
   expect_error(check_baseline(structure(list(), reason = "singular")), "singular")
-  # The screens do not accept the published approximation.
+  # The screens have no method argument.
   expect_error(screen_associations(pm, method = "published"), class = "deconflate_unsupported")
   expect_error(sensitivity_oat(pm, method = "published"), class = "deconflate_unsupported")
-  # With the exact method, the pole model is an ordinary scenario.
+  # With the model, the pole model is an ordinary scenario.
   sc <- screen_associations(pm)
   expect_true(all(is.na(sc$failed)))
   expect_true(all(is.finite(sc$total)))
@@ -146,38 +145,41 @@ test_that("a zero mean with positive uncertainty gives insufficient_info", {
   expect_equal(mc_stats(g, c(0.025, 0.5, 0.975), trim = 0.05, check_pole = FALSE)$row$stability, "ok")
 })
 
-# ---- 4. Three-way terms and unknown pairs -------------------------------------
+# ---- 4. Three-way associations and unknown pairs ------------------------------
 
-test_that("with unknown pairs, a three-way term can change additive results (Bob)", {
+test_that("with unknown pairs, a three-way association can change additive results (Bob)", {
+  # Three diseases, every pair unknown, and one OR_ratio row: the a-b odds
+  # ratio among c is 4 times that among not-c. (With three diseases this is
+  # the log-linear three-way term of earlier versions.)
   pop <- function(ratio) {
     cm_population(cm_diseases(c("a", "b", "c"), c(0.5, 0.5, 0.5)),
-                  three_way = if (ratio != 1) cm_three_way("a", "b", "c", ratio))
+                  if (ratio != 1) cm_associations("a", "b", ratio, measure = "OR_ratio", among = "c"))
   }
   m1 <- cm_model(pop(1), cm_impacts(c("a", "b", "c"), c(1, 2, 3)))
   m4 <- cm_model(pop(4), cm_impacts(c("a", "b", "c"), c(1, 2, 3)))
-  # Every pair is unknown (no associations): deconflate() refuses, the
-  # global engine and the screens do not.
-  expect_error(deconflate(m4), class = "deconflate_unsupported")
-  expect_equal(global_reasons(m4), c("three-way terms", "3 pairs without an association (unknown)"))
-  r1 <- adjust_impacts(m1, method = "global")
-  r4 <- adjust_impacts(m4, method = "global")
+  expect_error(deconflate(m1), class = "deconflate_unsupported")
+  r1 <- adjust_additive(m1, joint = fit_joint(m1))
+  r4 <- deconflate(m4, n_draws = 0)
   expect_equal(r1$totals$adjusted_total, 3, tolerance = 1e-8)
   expect_equal(r1$adjusted$adjusted, c(1, 2, 3), tolerance = 1e-8)
-  expect_equal(unname(r4$joint_pairs["a", "b"]), 0.2988400309685928, tolerance = 1e-7)
-  expect_equal(r4$totals$adjusted_total, 2.157155621237494, tolerance = 1e-7)
-  expect_equal(r4$adjusted$adjusted, c(0.195311748647, 1.438103747492, 2.680895746336),
+  # Python reference (reference_v041.py, bob_three_way()).
+  expect_equal(unname(r4$joint_pairs["a", "b"]), 0.298840030968, tolerance = 1e-7)
+  expect_equal(r4$totals$adjusted_total, 2.157155621241, tolerance = 1e-7)
+  expect_equal(r4$adjusted$adjusted, c(0.195311748651, 1.438103747494, 2.680895746336),
                tolerance = 1e-7)
-  st <- screen_three_way(m1, ratios = 4)
+  # The OR_ratio row is about a and b; a:c and b:c are unknown.
+  expect_equal(paste(r4$unknown_pairs$disease1, r4$unknown_pairs$disease2), c("a c", "b c"))
+  st <- screen_three_way(m1, ratios = 4, triples = list(c("a", "b", "c")))
   expect_equal(attr(st, "baseline_total"), 3, tolerance = 1e-8)
-  expect_equal(st$total, 2.157155621237494, tolerance = 1e-7)
-  expect_equal(st$rel_change, (2.157155621237494 - 3) / 3, tolerance = 1e-7)
+  expect_equal(st$total, 2.157155621241, tolerance = 1e-7)
+  expect_equal(st$rel_change, (2.157155621241 - 3) / 3, tolerance = 1e-7)
 })
 
-test_that("with constrained pairs, a three-way term leaves additive results unchanged", {
-  m <- cm_model(t2_pop(three_way = cm_three_way("d1", "d2", "d3", 4)),
+test_that("with crude pair rows, a three-way association leaves additive results unchanged", {
+  m <- cm_model(t2_pop(cm_associations("d1", "d2", 4, measure = "OR_ratio", among = "d3")),
                 cm_impacts(t2_ids, c(2.5, 5, 7.5)))
   res <- deconflate(m)
-  expect_equal(res$method, "global")
+  expect_equal(res$method, "full model")
   expect_equal(res$adjusted$adjusted, deconflate(example_supplement())$adjusted$adjusted, tolerance = 1e-8)
 })
 
@@ -193,16 +195,14 @@ test_that("simulate_raw_impacts() stops on a joint that did not converge", {
   expect_error(simulate_raw_impacts(bad, truth, joint = j), class = "deconflate_nonconvergence")
 })
 
-# ---- 7. Event estimands are explicit -------------------------------------------
+# ---- 7. Event estimands follow from adjusted_for --------------------------------
 
-test_that("event estimands must be stated with their snapshot names", {
-  expect_error(cm_impacts(t2_ids, c(1.5, 2, 1.3), measure = "HR"), "State the estimand")
-  expect_error(cm_impacts(t2_ids, c(1.5, 2, 1.3), measure = "HR", estimand = "crude"), "estimand")
-  expect_error(cm_impacts(t2_ids, c(1.5, 2, 1.3), measure = "HR", estimand = "adjusted_linear",
-                          adjusted_for = "all"),
-               "estimand")
-  h <- cm_impacts(t2_ids, c(1.5, 2, 1.3), measure = "HR", estimand = "snapshot_crude")
-  expect_equal(h$estimand, rep("snapshot_crude", 3))
+test_that("event impacts need a measure; adjusted_for decides crude or stratified", {
+  h <- cm_impacts(t2_ids, c(1.5, 2, 1.3), measure = "HR")
+  expect_equal(attr(h, "kind"), "event")
+  expect_error(cm_impacts(t2_ids, c(1.5, 2, 1.3), measure = "HR", estimand = "snapshot_crude"),
+               "no longer used", class = "deconflate_unsupported")
+  expect_error(cm_impacts(t2_ids, c(1.5, 2, 1.3), measure = "HR2"), "measure")
 })
 
 test_that("historical conversions are not in the general examples", {
@@ -218,10 +218,10 @@ test_that("historical conversions are not in the general examples", {
   # The (internal) economic inputs value the yield and fertility analyses.
   eco <- uk_dairy_2022_economics()
   expect_equal(names(eco$valuation), c("yield", "fertility"))
-  # Unlisted pairs are unknown: the pairwise methods cannot run.
-  cmp <- compare_methods(uk, methods = c("simultaneous", "global"))
-  expect_equal(cmp$methods, "global")
-  expect_match(cmp$failed[["simultaneous"]], "No association for")
+  # Unlisted pairs are unknown: the published approximation cannot run.
+  cmp <- compare_methods(uk)
+  expect_equal(cmp$methods, "deconflate")
+  expect_match(cmp$failed[["published"]], "needs a crude pair row for every pair")
   # Valuation is not exported.
   ex <- getNamespaceExports("deconflate")
   for (f in c("uk_dairy_2022_economics", "productivity_gap", "value_losses", "cm_mc_gap")) {
@@ -233,5 +233,5 @@ test_that("historical conversions are not in the general examples", {
   expect_equal(names(formals(example_global_dairy)), c("outcome", "inputs"))
   gc <- example_global_dairy("culling")
   expect_equal(impact_kind(gc$impacts), "event")
-  expect_true(all(paste0("impact:", gc$impacts$disease) %in% names(gc$distributions)))
+  expect_true(all(paste0("impacts:", gc$impacts$row) %in% names(gc$distributions)))
 })

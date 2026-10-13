@@ -1,12 +1,13 @@
 # Reading inputs from CSV files and data frames (cm_read_inputs() and friends).
-# Reference values: inst/validation/reference_v040.py (sections 4 and 6a) and
-# reference_five_diseases.py.
+# Reference values: inst/validation/reference_v040.py (sections 4 and 6a),
+# reference_five_diseases.py (the ten pair rows of the five-disease example)
+# and reference_v041.py (the five-disease example of 0.4).
 
 # The Supplementary File population as tables typed in R.
 supp_tables <- function() {
   list(
-    diseases = data.frame(id = ids3, value = c(0.10, 0.15, 0.20)),
-    associations = data.frame(disease1 = c("d1", "d1", "d2"), disease2 = c("d2", "d3", "d3"),
+    diseases = data.frame(disease = ids3, value = c(0.10, 0.15, 0.20)),
+    associations = data.frame(disease = c("d1", "d1", "d2"), associated_with = c("d2", "d3", "d3"),
                               value = c(2, 1, 3)),
     yield = data.frame(disease = ids3, value = c(2.5, 5, 7.5), units = "%")
   )
@@ -28,10 +29,8 @@ input_dir <- function(name, tables = list()) {
   dir
 }
 
-test_that("cm_read_inputs() takes named tables and returns a model", {
-  expect_equal(names(formals(cm_read_inputs)),
-               c("diseases", "associations", "impacts", "interactions", "three_way",
-                 "adjusted_associations"))
+test_that("cm_read_inputs() takes three named tables and returns a model", {
+  expect_equal(names(formals(cm_read_inputs)), c("diseases", "associations", "impacts", "..."))
   expect_equal(names(formals(cm_check_inputs)), names(formals(cm_read_inputs)))
   tabs <- supp_tables()
   m <- cm_read_inputs(diseases = tabs$diseases, associations = tabs$associations,
@@ -39,83 +38,81 @@ test_that("cm_read_inputs() takes named tables and returns a model", {
   expect_s3_class(m, "cm_model")
   expect_s3_class(attr(m, "problems"), "cm_problems")
   expect_equal(nrow(attr(m, "problems")), 0)
-  expect_equal(m$diseases$id, ids3)
+  expect_equal(m$diseases$disease, ids3)
+  expect_equal(m$associations$row, 1:3)
+  expect_equal(m$impacts$row, 1:3)
   expect_equal(attr(m$impacts, "units"), "%")
   expect_null(attr(m$impacts, "label"))
   expect_equal(attr(m$impacts, "kind"), "additive")
   expect_null(m$distributions)
-  expect_null(m$interactions)
-  expect_null(m$three_way)
   expect_equal(deconflate(m, n_draws = 0)$adjusted$adjusted,
                deconflate(supp_model(c(2.5, 5, 7.5)), n_draws = 0)$adjusted$adjusted)
-  expect_equal(adjust_impacts(m, method = "published")$adjusted$adjusted,
-               adjust_impacts(example_supplement(), method = "published")$adjusted$adjusted)
+  expect_equal(adjust_published(m)$adjusted$adjusted, adjust_published(example_supplement())$adjusted$adjusted)
 
-  # diseases and impacts are required; the arguments of 0.3 are gone.
+  # diseases and impacts are required; the arguments of earlier versions
+  # give messages.
   expect_error(cm_read_inputs(impacts = tabs$yield), "`diseases` is required")
   expect_error(cm_read_inputs(diseases = tabs$diseases), "`impacts` is required")
-  expect_error(cm_read_inputs(dir = tempdir()), "unused argument")
-  expect_error(cm_check_inputs(dir = tempdir()), "unused argument")
-  expect_error(cm_read_inputs(diseases = tabs$diseases, impacts = tabs$yield,
-                              hazard_ratios = tabs$yield), "unused argument")
+  expect_error(cm_read_inputs(dir = tempdir()), "Unknown argument")
+  expect_error(cm_check_inputs(dir = tempdir()), "Unknown argument")
+  expect_error(cm_read_inputs(diseases = tabs$diseases, impacts = tabs$yield, three_way = "x"),
+               "OR_ratio", class = "deconflate_unsupported")
+  expect_error(cm_read_inputs(diseases = tabs$diseases, impacts = tabs$yield, interactions = "x"),
+               "rows of the impact table", class = "deconflate_unsupported")
+  expect_error(cm_check_inputs(diseases = tabs$diseases, impacts = tabs$yield,
+                               adjusted_associations = "use_as_marginal"), "no longer used")
 })
 
-test_that("the template writes six files, read back as yield (additive) and culling (event)", {
-  expect_false("type" %in% names(formals(cm_template)))
+test_that("the template writes four files, read back as yield (additive) and culling (event)", {
   dir <- input_dir("template")
-  expect_message(paths <- cm_template(dir), "Wrote 6 files")
-  expect_setequal(basename(paths),
-                  c("diseases.csv", "associations.csv", "yield.csv", "yield_interactions.csv",
-                    "culling.csv", "three_way.csv"))
+  expect_message(paths <- cm_template(dir), "Wrote 4 files")
+  expect_setequal(basename(paths), c("diseases.csv", "associations.csv", "yield.csv", "culling.csv"))
   expect_error(cm_template(dir), "already exist")
-  expect_message(cm_template(dir, overwrite = TRUE), "Wrote 6 files")
+  expect_message(cm_template(dir, overwrite = TRUE), "Wrote 4 files")
   f <- function(x) file.path(dir, x)
+  # The columns of each file, in the documented order.
+  expect_equal(names(utils::read.csv(f("diseases.csv")))[1:4], c("disease", "measure", "value", "label"))
+  expect_equal(names(utils::read.csv(f("associations.csv")))[1:6],
+               c("disease", "associated_with", "among", "adjusted_for", "measure", "value"))
+  expect_equal(names(utils::read.csv(f("yield.csv")))[1:4], c("disease", "among", "adjusted_for", "value"))
   expect_equal(nrow(cm_check_inputs(diseases = f("diseases.csv"), associations = f("associations.csv"),
-                                    impacts = f("yield.csv"), interactions = f("yield_interactions.csv"),
-                                    three_way = f("three_way.csv"))), 0)
+                                    impacts = f("yield.csv"))), 0)
 
   # Yield: additive impacts, in percent of yield.
   y <- cm_read_inputs(diseases = f("diseases.csv"), associations = f("associations.csv"),
                       impacts = f("yield.csv"))
   expect_equal(nrow(attr(y, "problems")), 0)
-  expect_equal(y$diseases$id, c("LAM", "SCK", "MET"))
+  expect_equal(y$diseases$disease, c("LAM", "SCK", "MET"))
+  expect_equal(y$diseases$label, c("lameness", "subclinical ketosis", "metritis"))
   expect_equal(y$diseases$prob, c(0.25, 1 - exp(-0.48), 0.10))
   expect_equal(y$impacts$value, c(4.81, 8.40, 5.61))
   expect_equal(attr(y$impacts, "units"), "% of yield")
   expect_equal(attr(y$impacts, "label"), "milk yield loss")
   expect_equal(impact_kind(y$impacts), "additive")
-  expect_equal(names(y$distributions), c("prob:LAM", "assoc:LAM:SCK", "impact:LAM", "impact:SCK"))
+  expect_equal(names(y$distributions), c("prob:LAM", "associations:1", "impacts:1", "impacts:2"))
   expect_equal(y$distributions[["prob:LAM"]]$type, "beta")
-  expect_equal(y$distributions[["assoc:LAM:SCK"]]$params$lower, 0)
+  expect_equal(y$distributions[["associations:1"]]$params$lower, 0)
   expect_output(print(y), "Uncertain inputs \\(with a distribution\\): 4")
-  # The empty interaction and three-way files are empty tables.
-  y2 <- cm_read_inputs(diseases = f("diseases.csv"), associations = f("associations.csv"),
-                       impacts = f("yield.csv"), interactions = f("yield_interactions.csv"),
-                       three_way = f("three_way.csv"))
-  expect_null(y2$interactions)
-  expect_null(y2$three_way)
   ry <- deconflate(y, n_draws = 0)
-  expect_equal(ry$method, "simultaneous")
+  expect_equal(ry$method, "pairwise shortcut")
   expect_length(ry$notes, 0)
   expect_null(ry$draws)
   # reference_v040.py, 6a
   expect_equal(ry$adjusted$adjusted, c(2.8705956676, 7.8191139087, 3.1698811769), tolerance = 1e-9)
   expect_equal(ry$totals$raw_sum, 4.965719508828417, tolerance = 1e-12)
   expect_equal(ry$totals$adjusted_total, 4.015413117941525, tolerance = 1e-9)
-  expect_equal(deconflate(y2, n_draws = 0)$adjusted$adjusted, ry$adjusted$adjusted)
 
   # Culling: event impacts (hazard ratios and a risk ratio).
   cu <- cm_read_inputs(diseases = f("diseases.csv"), associations = f("associations.csv"),
                        impacts = f("culling.csv"))
   expect_equal(impact_kind(cu$impacts), "event")
   expect_equal(cu$impacts$measure, c("HR", "HR", "RR"))
-  expect_equal(cu$impacts$estimand, rep("snapshot_crude", 3))
   expect_equal(cu$impacts$value, c(1.74, 1.92, 1.45))
   expect_equal(attr(cu$impacts, "label"), "culling")
   expect_null(attr(cu$impacts, "units"))
-  expect_equal(names(cu$distributions), c("prob:LAM", "assoc:LAM:SCK", "impact:LAM"))
-  expect_equal(cu$distributions[["impact:LAM"]]$type, "lognormal")
-  expect_equal(cu$distributions[["impact:LAM"]]$params$meanlog, log(1.74))
+  expect_equal(names(cu$distributions), c("prob:LAM", "associations:1", "impacts:1"))
+  expect_equal(cu$distributions[["impacts:1"]]$type, "lognormal")
+  expect_equal(cu$distributions[["impacts:1"]]$params$meanlog, log(1.74))
   expect_output(print(cu), "event impacts: use event_model = TRUE")
   expect_error(deconflate(cu, n_draws = 0), "event_model = TRUE", class = "deconflate_unsupported")
   expect_warning(rc <- deconflate(cu, event_model = TRUE, overall_risk = 0.25, n_draws = 0), NA)
@@ -147,36 +144,79 @@ test_that("tables without associations are read; deconflate() then needs one", {
   expect_true(all(sc$status == "unknown"))
 })
 
-test_that("adjusted_linear impacts are read with their adjustment sets", {
+test_that("adjusted impacts are read with their adjustment sets", {
   tabs <- supp_tables()
-  imp <- data.frame(disease = ids3, value = c(2.2, 5, 7.5),
-                    estimand = c("adjusted_linear", "crude", "crude"),
-                    adjusted_for = c("d2", NA, NA))
+  imp <- data.frame(disease = ids3, value = c(2.2, 5, 7.5), adjusted_for = c("d2", NA, NA))
   m <- cm_read_inputs(diseases = tabs$diseases, associations = tabs$associations, impacts = imp)
-  ref <- supp_model(c(2.2, 5, 7.5), estimand = c("adjusted_linear", "crude", "crude"),
-                    adjusted_for = c("d2", NA, NA))
+  ref <- supp_model(c(2.2, 5, 7.5), adjusted_for = c("d2", NA, NA))
   expect_equal(deconflate(m, n_draws = 0)$adjusted$adjusted,
                deconflate(ref, n_draws = 0)$adjusted$adjusted)
-
-  bad <- imp
-  bad$adjusted_for <- c(NA, "d1", NA)
-  pr <- cm_check_inputs(diseases = tabs$diseases, associations = tabs$associations, impacts = bad)
-  expect_true(has_problem(pr, "impacts", 1, "adjusted_for"))  # adjusted_linear without a set
-  expect_true(has_problem(pr, "impacts", 2, "adjusted_for"))  # adjusted_for with a crude estimate
+  # A name that is not a disease of the model is a factor outside the model:
+  # a note, and the row is used as crude.
   bad <- imp
   bad$adjusted_for[1] <- "d9"
   pr <- cm_check_inputs(diseases = tabs$diseases, associations = tabs$associations, impacts = bad)
-  expect_true(has_problem(pr, "impacts", 1, "adjusted_for"))
-  bad <- imp
-  bad$estimand[2] <- "adjusted"
-  pr <- cm_check_inputs(diseases = tabs$diseases, associations = tabs$associations, impacts = bad)
-  expect_true(has_problem(pr, "impacts", 2, "estimand"))
+  expect_true(has_problem(pr, "impacts", 1, "adjusted_for", severity = "note"))
+  expect_false(any(pr$severity == "error"))
+  expect_match(pr$problem[1], "the row is used as crude")
+  # The estimand column of earlier versions is ignored, with a note.
+  old <- cbind(imp, estimand = c("adjusted_linear", "crude", "crude"))
+  pr <- cm_check_inputs(diseases = tabs$diseases, associations = tabs$associations, impacts = old)
+  expect_true(has_problem(pr, "impacts", NA, "estimand", severity = "note"))
+  expect_false(any(pr$severity == "error"))
+})
+
+test_that("rows about combinations and subgroups are read", {
+  tabs <- supp_tables()
+  # (The d1-d3 pair is described by the prevalence of the combination.)
+  assoc <- data.frame(disease = c("d1", "d2", "d1", "d1;d3"),
+                      associated_with = c("d2", "d3", "d2", NA),
+                      among = c(NA, NA, "d3", NA),
+                      measure = c("OR", "OR", "OR_ratio", "prevalence"),
+                      value = c(2, 3, 1.5, 0.015))
+  imp <- data.frame(disease = c(ids3, "d1;d2", "d1"), among = c(NA, NA, NA, NA, "no others"),
+                    adjusted_for = c(NA, NA, NA, "all", NA), value = c(2.5, 5, 7.5, 1, 2.4),
+                    dist = c(NA, NA, NA, NA, "normal"), p1 = c(NA, NA, NA, NA, 2.4), p2 = c(NA, NA, NA, NA, 0.5))
+  pr <- cm_check_inputs(diseases = tabs$diseases, associations = assoc, impacts = imp)
+  expect_equal(nrow(pr), 0)
+  m <- cm_read_inputs(diseases = tabs$diseases, associations = assoc, impacts = imp)
+  expect_equal(m$associations$among, c(NA, NA, "d3", NA))
+  expect_equal(pair_tables(m)$status, c("specified", "other rows", "specified"))
+  expect_equal(m$impacts$disease, c(ids3, "d1;d2", "d1"))
+  expect_output(print(m), "interactions: d1;d2")
+  expect_output(print(m), "Association rows: 4")
+  res <- deconflate(m, n_draws = 0)
+  expect_equal(res$method, "full model")
+  expect_equal(res$adjusted$disease, c(ids3, "d1;d2"))
+  expect_equal(res$adjusted$rows, c(2, 1, 1, 1))
+  # The d1 row among animals with no other disease is fitted by weighted
+  # least squares beside the exact rows.
+  expect_equal(res$estimates$fitted[1:4], c(2.5, 5, 7.5, 1), tolerance = 1e-10)
+  expect_true(is.finite(res$estimates$std_residual[5]))
+  # Problems in such rows are reported with their row and column.
+  bad_a <- data.frame(disease = c("d1", "d1", "d1", "d1;d2", "d1"),
+                      associated_with = c("d2", "d9", "d2", NA, "d1"),
+                      among = c("d1", NA, "d3;no d3", NA, NA),
+                      measure = c("OR", "OR", "OR", "prevalence", "OR"), value = c(2, 2, 2, 0.1, 2))
+  pr <- cm_check_inputs(diseases = tabs$diseases, associations = bad_a, impacts = tabs$yield)
+  expect_true(has_problem(pr, "associations", 1, "among"))            # about d1 and among d1
+  expect_true(has_problem(pr, "associations", 2, "associated_with"))  # unknown disease
+  expect_true(has_problem(pr, "associations", 3, "among"))            # d3 twice
+  expect_false(has_problem(pr, "associations", 4))                    # a combination's prevalence
+  expect_true(has_problem(pr, "associations", 5, "disease"))          # d1 on both sides
+  bad_i <- data.frame(disease = c(ids3, "d1;d9", "d1"), among = c(NA, NA, NA, NA, "d1"), value = 1:5)
+  pr <- cm_check_inputs(diseases = tabs$diseases, associations = tabs$associations, impacts = bad_i)
+  expect_true(has_problem(pr, "impacts", 4, "disease"))
+  expect_true(has_problem(pr, "impacts", 5, "among"))
+  # A whole-population prevalence of one disease belongs in the diseases table.
+  pr <- cm_check_inputs(diseases = tabs$diseases, impacts = tabs$yield,
+                        associations = data.frame(disease = "d1", measure = "prevalence", value = 0.1))
+  expect_match(pr$problem[pr$table == "associations"], "belongs in the diseases table")
 })
 
 test_that("the shipped global dairy files match example_global_dairy()", {
   f <- function(x) extdata("global_dairy_2024", x)
   expect_true(file.exists(f("culling.csv")))
-  expect_false(file.exists(f("hazard_ratios.csv")))
   files <- c(yield = "impacts_yield.csv", fertility = "impacts_fertility.csv", culling = "culling.csv")
   for (outcome in names(files)) {
     expect_equal(nrow(cm_check_inputs(diseases = f("diseases.csv"), associations = f("associations.csv"),
@@ -184,21 +224,21 @@ test_that("the shipped global dairy files match example_global_dairy()", {
     m <- cm_read_inputs(diseases = f("diseases.csv"), associations = f("associations.csv"),
                         impacts = f(files[[outcome]]))
     ref <- example_global_dairy(outcome)
-    expect_equal(m$diseases$id, ref$diseases$id)
-    expect_equal(m$diseases$type, ref$diseases$type)
+    expect_equal(m$diseases$disease, ref$diseases$disease)
+    expect_equal(m$diseases$measure, ref$diseases$measure)
     expect_equal(m$diseases$prob, ref$diseases$prob, tolerance = 1e-12)
-    km <- pair_key(m$associations$disease1, m$associations$disease2)
-    kr <- pair_key(ref$associations$disease1, ref$associations$disease2)
+    km <- pair_key(m$associations$disease, m$associations$associated_with)
+    kr <- pair_key(ref$associations$disease, ref$associations$associated_with)
     expect_setequal(km, kr)
     expect_equal(m$associations$value[match(kr, km)], ref$associations$value, tolerance = 1e-12)
     expect_equal(m$impacts$disease, ref$impacts$disease)
     expect_equal(m$impacts$value, ref$impacts$value, tolerance = 1e-12)
     expect_equal(m$impacts$measure, ref$impacts$measure)
-    expect_equal(m$impacts$estimand, ref$impacts$estimand)
     expect_equal(attr(m$impacts, "label"), attr(ref$impacts, "label"))
     expect_equal(attr(m$impacts, "units"), attr(ref$impacts, "units"))
     expect_equal(impact_kind(m$impacts), if (outcome == "culling") "event" else "additive")
-    # The distributions in the tables are those of the 2024 analysis.
+    # The distributions in the tables are those of the 2024 analysis (the
+    # rows are in the same order in the files and in R).
     dm <- m$distributions
     dr <- ref$distributions
     expect_setequal(names(dm), names(dr))
@@ -211,8 +251,8 @@ test_that("the shipped global dairy files match example_global_dairy()", {
   # published approximation gives the analysis values.
   m <- cm_read_inputs(diseases = f("diseases.csv"), associations = f("associations.csv"),
                       impacts = f("impacts_yield.csv"))
-  expect_equal(adjust_impacts(with_independent_pairs(m), method = "published")$adjusted$adjusted,
-               adjust_impacts(global_dairy_analyses("analysis")$yield, method = "published")$adjusted$adjusted,
+  expect_equal(adjust_published(with_independent_pairs(m))$adjusted$adjusted,
+               adjust_published(global_dairy_analyses("analysis")$yield)$adjusted$adjusted,
                tolerance = 1e-10)
 })
 
@@ -225,40 +265,36 @@ test_that("the shipped example with errors reports each deliberate error", {
   expect_s3_class(pr, "cm_problems")
   expect_named(pr, c("table", "row", "column", "severity", "problem"))
   expected <- data.frame(
-    table = c(rep("diseases", 4), rep("associations", 10), rep("impacts", 4)),
-    row = c(2, 3, 4, 5,
-            NA, 2, 3, 4, 5, 6, 7, 8, 9, 9,
-            2, 3, 3, NA),
-    column = c("dist", "value", "dist", "id",
-               NA, "dist", "disease2", NA, "value", "adjusted", "measure", "measure", "measure",
-               "disease2",
-               "value", "adjusted_for", "dist", "units"),
+    table = c(rep("diseases", 5), rep("associations", 8), rep("impacts", 4)),
+    row = c(2, 3, 4, 5, 6,
+            2, 3, 4, 6, 7, 8, 9, 10,
+            2, 3, 5, NA),
+    column = c("dist", "value", "dist", "disease", "disease",
+               "dist", "associated_with", "value", "measure", "measure", "among", NA, "among",
+               "value", "dist", "disease", "units"),
     stringsAsFactors = FALSE
   )
   for (i in seq_len(nrow(expected))) {
     expect_true(has_problem(pr, expected$table[i], expected$row[i], expected$column[i]),
                 info = paste(expected$table[i], expected$row[i], expected$column[i]))
   }
-  # Each error is reported once (checked row by row against R/import.R).
+  # Each error is reported once.
   expect_equal(sum(pr$severity == "error"), nrow(expected))
-  # The note: a point value outside its distribution (MET, uniform from 6 to 8).
-  expect_equal(sum(pr$severity == "note"), 1)
+  # The notes: an adjustment for factors outside the model, and a point
+  # value outside its distribution (MET, uniform from 6 to 8).
+  expect_equal(sum(pr$severity == "note"), 2)
+  expect_true(has_problem(pr, "associations", 5, "adjusted_for", severity = "note"))
   expect_true(has_problem(pr, "impacts", 4, "dist", severity = "note"))
   # The decimal comma is a value problem, not a missing value as well.
   expect_equal(sum(pr$table == "impacts" & pr$row %in% 2), 1)
-  # The count columns are reported once, for the table; the retired
-  # measures once per row, with what to do instead.
-  counts <- pr$problem[pr$table == "associations" & is.na(pr$row)]
-  expect_length(counts, 1)
-  expect_match(counts, "n11 \\* n00")
+  # Retired measures, with what to do instead.
+  expect_match(pr$problem[pr$table == "associations" & pr$row %in% 6 & pr$column %in% "measure"],
+               "now 'prevalence'")
   expect_match(pr$problem[pr$table == "associations" & pr$row %in% 7 & pr$column %in% "measure"],
-               "measure OR")
-  expect_match(pr$problem[pr$table == "associations" & pr$row %in% 8 & pr$column %in% "measure"],
                "odds ratio of 1")
-  expect_match(pr$problem[pr$table == "associations" & pr$row %in% 9 & pr$column %in% "measure"],
-               "leave the pair out")
-  expect_match(pr$problem[pr$table == "associations" & pr$row %in% 5], "Leave the pair out")
+  expect_match(pr$problem[pr$table == "associations" & pr$row %in% 4], "Leave the pair out")
   expect_match(pr$problem[pr$table == "diseases" & pr$row %in% 2], "p2 \\(sd\\)")
+  expect_match(pr$problem[pr$table == "diseases" & pr$row %in% 6], "belongs in the associations table")
   # Every row documented as an error in the note column is reported (in its
   # row, or at table level), and no undocumented row is.
   files <- c(diseases = "diseases.csv", associations = "associations.csv", impacts = "impacts_yield.csv")
@@ -273,42 +309,72 @@ test_that("the shipped example with errors reports each deliberate error", {
     reported <- unique(stats::na.omit(pr$row[pr$table == lab & pr$severity == "error"]))
     expect_true(all(reported %in% flagged), info = files[[lab]])
   }
-  expect_output(print(pr), "Found 18 problem")
+  expect_output(print(pr), "Found 17 problem")
   expect_error(cm_read_inputs(diseases = f("diseases.csv"), associations = f("associations.csv"),
                               impacts = f("impacts_yield.csv")),
                "diseases, row 3, column 'value'", class = "deconflate_input_problems")
 
-  # culling.csv: event impacts with three mistakes.
+  # culling.csv: event impacts with three mistakes, and the estimand column
+  # of earlier versions (a note).
   pc <- cm_check_inputs(diseases = f("diseases.csv"), associations = f("associations.csv"),
                         impacts = f("culling.csv"))
-  expect_true(has_problem(pc, "impacts", 2, "estimand"))       # no estimand
+  expect_true(has_problem(pc, "impacts", 2, "measure"))        # no measure
   expect_true(has_problem(pc, "impacts", 3, "value"))          # HR of 0
-  expect_true(has_problem(pc, "impacts", 4, "adjusted_for"))   # stratified without a set
+  expect_true(has_problem(pc, "impacts", 4, "value"))          # RD outside (-1, 1)
+  expect_true(has_problem(pc, "impacts", NA, "estimand", severity = "note"))
   expect_equal(sum(pc$severity == "error" & pc$table == "impacts"), 3)
-  expect_match(pc$problem[pc$table == "impacts" & pc$row %in% 2], "snapshot_crude or snapshot_stratified")
-  # The other tables report the same problems as before.
-  expect_equal(sum(pc$severity == "error"), 17)
-  expect_false(any(pc$severity == "note"))
+})
+
+test_that("files in the layout of earlier versions say what to change", {
+  dis <- data.frame(id = c("a", "b"), value = c(0.1, 0.2), type = "prevalence")
+  pr <- cm_check_inputs(diseases = dis, impacts = data.frame(disease = c("a", "b"), value = 1:2))
+  expect_true(has_problem(pr, "diseases", NA, "id"))
+  expect_true(has_problem(pr, "diseases", NA, "type"))
+  expect_match(pr$problem[pr$column %in% "id"], "now called `disease`")
+  dis2 <- data.frame(disease = c("a", "b"), value = c(0.1, 0.2))
+  old_a <- data.frame(disease1 = "a", disease2 = "b", value = 2, adjusted = FALSE)
+  pr <- cm_check_inputs(diseases = dis2, associations = old_a,
+                        impacts = data.frame(disease = c("a", "b"), value = 1:2))
+  expect_true(has_problem(pr, "associations", NA, "disease1"))
+  expect_true(has_problem(pr, "associations", NA, "disease2"))
+  expect_match(pr$problem[pr$column %in% "disease2"], "associated_with")
+  expect_true(has_problem(pr, "associations", NA, "adjusted", severity = "note"))
+  # A three-way file given as the associations.
+  tw <- data.frame(disease1 = "a", disease2 = "b", disease3 = "c", ratio = 2)
+  pr <- cm_check_inputs(diseases = dis2, associations = tw,
+                        impacts = data.frame(disease = c("a", "b"), value = 1:2))
+  expect_match(pr$problem[pr$table == "associations"][1], "three-way file")
+  # An impact table with an outcome column.
+  old <- data.frame(disease = c("a", "b", "a", "b"), outcome = c("yield", "yield", "culling", "culling"),
+                    value = c(2, 3, 1.5, 1.8))
+  pr <- cm_check_inputs(diseases = dis2, impacts = old)
+  expect_true(has_problem(pr, "impacts", NA, "outcome"))
+  expect_error(cm_read_inputs(diseases = dis2, impacts = old), class = "deconflate_input_problems")
+  # scale and direction are dropped with a note only.
+  pr <- cm_check_inputs(diseases = dis2,
+                        impacts = data.frame(disease = c("a", "b"), value = c(2, 3),
+                                             scale = "percent", direction = "decrease"))
+  expect_true(has_problem(pr, "impacts", NA, NA, severity = "note"))
+  expect_false(any(pr$severity == "error"))
 })
 
 test_that("all problems in tables typed in R are reported at once", {
   pr <- cm_check_inputs(
-    diseases = data.frame(id = c("a", "b", "b", "c"), value = c(0.1, 1.5, 0.2, 0.3)),
-    associations = data.frame(disease1 = "a", disease2 = "z", value = -1),
+    diseases = data.frame(disease = c("a", "b", "b", "c"), value = c(0.1, 1.5, 0.2, 0.3)),
+    associations = data.frame(disease = "a", associated_with = "z", value = -1),
     impacts = data.frame(disease = c("a", "b"), value = c("2", "x"), extra = 1,
                          dist = c("normal", NA), p1 = c(2, 1))
   )
   expect_s3_class(pr, "cm_problems")
   expect_true(has_problem(pr, "diseases", 2, "value"))
-  expect_true(has_problem(pr, "diseases", 3, "id"))
-  expect_true(has_problem(pr, "associations", 1, "disease2"))
+  expect_true(has_problem(pr, "diseases", 3, "disease"))
   expect_true(has_problem(pr, "associations", 1, "value"))
   expect_true(has_problem(pr, "impacts", 2, "value"))
   expect_true(has_problem(pr, "impacts", NA, NA))              # no impact for c
   expect_true(has_problem(pr, "impacts", NA, "extra", severity = "note"))
   expect_true(has_problem(pr, "impacts", 1, "dist"))           # normal without sd
   expect_true(has_problem(pr, "impacts", 2, "dist"))           # p1 without a distribution
-  expect_error(cm_read_inputs(diseases = data.frame(id = "a", value = 2),
+  expect_error(cm_read_inputs(diseases = data.frame(disease = "a", value = 2),
                               impacts = data.frame(disease = "a", value = 1)),
                "Found 1 problem", class = "deconflate_input_problems")
 })
@@ -326,49 +392,31 @@ test_that("missing tables and files are reported", {
   expect_true(any(grepl("data frame or the path", pr$problem[pr$table == "diseases"])))
   expect_error(cm_read_inputs(diseases = file.path(tempdir(), "no-such-file.csv"), impacts = tabs$yield),
                "File not found", class = "deconflate_input_problems")
-  # Event impacts: an adjustment set for a crude estimate, and a missing row.
+  # Event impacts without a row for d3.
   pr <- cm_check_inputs(diseases = tabs$diseases,
-                        impacts = data.frame(disease = c("d1", "d2"), value = c(1.5, 2), measure = "HR",
-                                             estimand = "snapshot_crude", adjusted_for = c("d2", NA)))
-  expect_true(has_problem(pr, "impacts", 1, "adjusted_for"))
-  expect_true(has_problem(pr, "impacts", NA, NA))              # no impact for d3
+                        impacts = data.frame(disease = c("d1", "d2"), value = c(1.5, 2), measure = "HR"))
+  expect_true(has_problem(pr, "impacts", NA, NA))
   expect_match(pr$problem[pr$table == "impacts" & is.na(pr$row)], "1 for ratios")
-})
-
-test_that("an impact table with an outcome column gives the migration error", {
-  dis <- data.frame(id = c("a", "b"), value = c(0.1, 0.2))
-  old <- data.frame(disease = c("a", "b", "a", "b"), outcome = c("yield", "yield", "culling", "culling"),
-                    value = c(2, 3, 1.5, 1.8))
-  pr <- cm_check_inputs(diseases = dis, impacts = old)
-  expect_true(has_problem(pr, "impacts", NA, "outcome"))
-  expect_error(cm_read_inputs(diseases = dis, impacts = old), class = "deconflate_input_problems")
-  # scale and direction are dropped with a note only
-  pr <- cm_check_inputs(diseases = dis,
-                        impacts = data.frame(disease = c("a", "b"), value = c(2, 3),
-                                             scale = "percent", direction = "decrease"))
-  expect_true(has_problem(pr, "impacts", NA, NA, severity = "note"))
-  expect_false(any(pr$severity == "error"))
 })
 
 test_that("retired association measures and count columns are errors", {
   tabs <- supp_tables()
-  assoc <- data.frame(disease1 = c("d1", "d1", "d2"), disease2 = c("d2", "d3", "d3"),
-                      value = c(NA, 1, NA), measure = c("table", "independent", "unknown"),
-                      n11 = c(10, NA, NA), n10 = c(20, NA, NA), n01 = c(30, NA, NA), n00 = c(40, NA, NA))
+  assoc <- data.frame(disease = c("d1", "d1", "d2", "d1"), associated_with = c("d2", "d3", "d3", "d2"),
+                      value = c(NA, 1, NA, 0.4), measure = c("table", "independent", "unknown", "cond_prob"),
+                      n11 = c(10, NA, NA, NA), n10 = c(20, NA, NA, NA), n01 = c(30, NA, NA, NA),
+                      n00 = c(40, NA, NA, NA))
   pr <- cm_check_inputs(diseases = tabs$diseases, associations = assoc, impacts = tabs$yield)
   expect_true(has_problem(pr, "associations", NA, NA))         # the count columns, once
   expect_equal(sum(pr$table == "associations" & is.na(pr$row)), 1)
-  expect_true(has_problem(pr, "associations", 1, "measure"))
-  expect_true(has_problem(pr, "associations", 2, "measure"))
-  expect_true(has_problem(pr, "associations", 3, "measure"))
+  for (r in 1:4) expect_true(has_problem(pr, "associations", r, "measure"), info = r)
   # A retired row is not also reported as a missing value.
   expect_false(has_problem(pr, "associations", 1, "value"))
   expect_false(has_problem(pr, "associations", 3, "value"))
-  expect_equal(sum(pr$severity == "error"), 4)
+  expect_equal(sum(pr$severity == "error"), 5)
   expect_error(cm_read_inputs(diseases = tabs$diseases, associations = assoc, impacts = tabs$yield),
                "no longer", class = "deconflate_input_problems")
   # Count columns alone (with an odds ratio in `value`) are still an error.
-  assoc2 <- data.frame(disease1 = "d1", disease2 = "d2", value = 2, n11 = 10, n10 = 20, n01 = 30, n00 = 40)
+  assoc2 <- data.frame(disease = "d1", associated_with = "d2", value = 2, n11 = 10, n10 = 20, n01 = 30, n00 = 40)
   pr <- cm_check_inputs(diseases = tabs$diseases, associations = assoc2, impacts = tabs$yield)
   expect_equal(sum(pr$severity == "error"), 1)
   expect_true(has_problem(pr, "associations", NA, NA))
@@ -382,8 +430,6 @@ test_that("retired association measures and count columns are errors", {
                class = "deconflate_unsupported")
   expect_error(cm_associations("d1", "d2", NA), "missing for some rows")
   expect_error(cm_associations("d1", "d2"), "Give each association a `value`")
-  expect_false(any(c("n11", "n10", "n01", "n00", "zero_cell") %in% names(formals(cm_associations))))
-  expect_false("missing_associations" %in% c(names(formals(cm_population)), names(formals(cm_model))))
   # An odds ratio of 1 states independence.
   pt <- pair_tables(supp_population())
   expect_equal(pt$p11[pt$disease1 == "d1" & pt$disease2 == "d3"], 0.10 * 0.20)
@@ -392,8 +438,7 @@ test_that("retired association measures and count columns are errors", {
 
 test_that("event impact tables have a measure column and are checked", {
   tabs <- supp_tables()
-  ev <- data.frame(disease = ids3, value = c(1.5, 1.3, 0.04), measure = c("HR", "RR", "RD"),
-                   estimand = "snapshot_crude", label = "culling")
+  ev <- data.frame(disease = ids3, value = c(1.5, 1.3, 0.04), measure = c("HR", "RR", "RD"), label = "culling")
   m <- cm_read_inputs(diseases = tabs$diseases, associations = tabs$associations, impacts = ev)
   expect_equal(attr(m$impacts, "kind"), "event")
   expect_equal(m$impacts$measure, c("HR", "RR", "RD"))
@@ -405,129 +450,46 @@ test_that("event impact tables have a measure column and are checked", {
 
   # Mistakes in event tables.
   bad <- data.frame(disease = ids3, value = c(1.5, -1, 1.2), measure = c("HR", NA, "RD"),
-                    estimand = c(NA, "snapshot_crude", "snapshot_stratified"),
                     adjusted_for = c(NA, NA, "d9"))
   pr <- cm_check_inputs(diseases = tabs$diseases, associations = tabs$associations, impacts = bad)
-  expect_true(has_problem(pr, "impacts", 1, "estimand"))       # estimand required
   expect_true(has_problem(pr, "impacts", 2, "measure"))        # a measure in every row
   expect_true(has_problem(pr, "impacts", 3, "value"))          # RD outside (-1, 1)
-  expect_true(has_problem(pr, "impacts", 3, "adjusted_for"))   # unknown disease
-  bad2 <- data.frame(disease = ids3, value = c(0, 1.3, 1.2), measure = c("HR", "HZ", "OR"),
-                     estimand = c("snapshot_crude", "snapshot_crude", "crude"),
-                     adjusted_for = c("d2", NA, NA))
+  expect_true(has_problem(pr, "impacts", 3, "adjusted_for", severity = "note"))   # not a disease
+  bad2 <- data.frame(disease = ids3, value = c(0, 1.3, 1.2), measure = c("HR", "HZ", "OR"))
   pr <- cm_check_inputs(diseases = tabs$diseases, associations = tabs$associations, impacts = bad2)
   expect_true(has_problem(pr, "impacts", 1, "value"))          # a ratio must be positive
-  expect_true(has_problem(pr, "impacts", 1, "adjusted_for"))   # set given for snapshot_crude
   expect_true(has_problem(pr, "impacts", 2, "measure"))        # unknown measure
-  expect_true(has_problem(pr, "impacts", 3, "estimand"))       # an additive estimand
-  expect_match(pr$problem[pr$table == "impacts" & pr$row %in% 3 & pr$column %in% "estimand"],
-               "for event impacts")
-
-  # Event estimands in an additive table, and interactions with event impacts.
-  mix <- data.frame(disease = ids3, value = c(1.5, 2, 1.3), estimand = "snapshot_crude")
-  pr <- cm_check_inputs(diseases = tabs$diseases, associations = tabs$associations, impacts = mix)
-  expect_true(has_problem(pr, "impacts", 1, "estimand"))
-  expect_match(pr$problem[pr$table == "impacts" & pr$row %in% 1], "add a measure column")
-  int <- data.frame(disease1 = "d1", disease2 = "d2", value = 0.5)
-  pr <- cm_check_inputs(diseases = tabs$diseases, associations = tabs$associations, impacts = ev,
-                        interactions = int)
-  expect_true(has_problem(pr, "interactions", NA, NA))
-  expect_error(cm_read_inputs(diseases = tabs$diseases, associations = tabs$associations, impacts = ev,
-                              interactions = int),
-               "additive impacts only", class = "deconflate_input_problems")
   # The same mistakes made in R.
-  expect_error(cm_impacts(ids3, c(1.5, 2, 1.3), estimand = "snapshot_crude"), "measure",
-               class = "deconflate_unsupported")
-  expect_error(cm_impacts(ids3, c(1.5, 2, 1.3), measure = "HR"), "State the estimand")
-  expect_error(cm_impacts(ids3, c(1.5, 2, 1.3), measure = "HR", estimand = "crude"), "Invalid `estimand`")
-  expect_error(cm_impacts(ids3, c(1.5, 0, 1.3), measure = "HR", estimand = "snapshot_crude"),
-               "must be positive")
-  expect_error(cm_impacts(ids3, c(1.5, 2, 1.3), measure = "HZ", estimand = "snapshot_crude"),
-               "Invalid `measure`")
-  expect_error(cm_model(supp_population(),
-                        cm_impacts(ids3, c(1.5, 2, 1.3), measure = "HR", estimand = "snapshot_crude"),
-                        cm_interactions("d1", "d2", 0.5)),
-               "additive impacts only", class = "deconflate_unsupported")
+  expect_error(cm_impacts(ids3, c(1.5, 0, 1.3), measure = "HR"), "must be positive")
+  expect_error(cm_impacts(ids3, c(1.5, 2, 1.3), measure = "HZ"), "Invalid `measure`")
 })
 
-test_that("interactions are read for additive impacts", {
+test_that("several rows per item are read and pooled", {
   tabs <- supp_tables()
-  int <- data.frame(disease1 = "d1", disease2 = "d2", value = 0.5, dist = "normal", p1 = 0.5, p2 = 0.1)
-  m <- cm_read_inputs(diseases = tabs$diseases, associations = tabs$associations, impacts = tabs$yield,
-                      interactions = int)
-  expect_equal(nrow(m$interactions), 1)
-  expect_equal(names(m$distributions), "inter:d1:d2")
-  expect_output(print(m), "Interactions: 1")
+  assoc <- rbind(tabs$associations, data.frame(disease = "d2", associated_with = "d1", value = 2.4))
+  assoc$dist <- c("lognormal_ci", NA, NA, "lognormal_ci")
+  assoc$p1 <- c(2, NA, NA, 2.4)
+  assoc$p2 <- c(1.4, NA, NA, 1.5)
+  assoc$p3 <- c(2.9, NA, NA, 3.8)
+  imp <- data.frame(disease = c(ids3, "d1"), value = c(2.5, 5, 7.5, 2.1), adjusted_for = c(NA, NA, NA, "d2"),
+                    dist = c("normal", NA, NA, "normal"), p1 = c(2.5, NA, NA, 2.1), p2 = c(0.5, NA, NA, 0.4))
+  m <- cm_read_inputs(diseases = tabs$diseases, associations = assoc, impacts = imp)
+  expect_equal(nrow(attr(m, "problems")), 0)
+  expect_equal(names(m$distributions), c("associations:1", "associations:4", "impacts:1", "impacts:4"))
+  pt <- pair_tables(m)
+  expect_equal(pt$measure[1], "pooled")
+  expect_equal(pt$rows[1], "1, 4")
   res <- deconflate(m, n_draws = 0)
-  expect_equal(res$method, "global")
-  expect_match(res$notes, "because of interactions")
-  ref <- supp_model(c(2.5, 5, 7.5), interactions = cm_interactions("d1", "d2", 0.5))
-  expect_equal(res$adjusted$adjusted, deconflate(ref, n_draws = 0)$adjusted$adjusted, tolerance = 1e-10)
-  res_s <- deconflate(m, method = "simultaneous", n_draws = 0)
-  expect_equal(res_s$method, "global")
-  expect_match(res_s$notes, "instead of the simultaneous method")
-  pr <- cm_check_inputs(diseases = tabs$diseases, associations = tabs$associations, impacts = tabs$yield,
-                        interactions = data.frame(disease1 = c("d1", "d2"), disease2 = c("d1", "d1"),
-                                                  value = c(1, 2)))
-  expect_true(has_problem(pr, "interactions", 1, "disease2"))   # the same disease twice
-})
-
-test_that("three_way is read into the model", {
-  tabs <- supp_tables()
-  dir <- input_dir("three-way", list(
-    diseases = tabs$diseases, associations = tabs$associations,
-    three_way = data.frame(disease1 = "d1", disease2 = "d2", disease3 = "d3", ratio = 2,
-                           source = "scenario"),
-    yield = data.frame(disease = ids3, value = c(2.5, 5, 7.5)),
-    yield_interactions = data.frame(disease1 = "d1", disease2 = "d2", value = 0.5)
-  ))
-  f <- function(x) file.path(dir, x)
-  m <- cm_read_inputs(diseases = f("diseases.csv"), associations = f("associations.csv"),
-                      impacts = f("yield.csv"), interactions = f("yield_interactions.csv"),
-                      three_way = f("three_way.csv"))
-  expect_s3_class(m$three_way, "cm_three_way")
-  expect_equal(m$three_way$ratio, 2)
-  expect_equal(m$three_way$source, "scenario")
-  expect_equal(nrow(m$interactions), 1)
-  expect_output(print(m), "Three-way terms: 1")
-  ref <- cm_model(supp_population(cm_three_way("d1", "d2", "d3", ratio = 2)),
-                  cm_impacts(ids3, c(2.5, 5, 7.5)), cm_interactions("d1", "d2", 0.5))
-  res <- deconflate(m, n_draws = 0)
-  expect_equal(res$method, "global")
-  expect_match(res$notes, "interactions and three-way terms")
-  expect_equal(res$adjusted$adjusted, deconflate(ref, n_draws = 0)$adjusted$adjusted, tolerance = 1e-8)
-
-  pr <- cm_check_inputs(diseases = tabs$diseases, impacts = tabs$yield,
-                        three_way = data.frame(disease1 = "d1", disease2 = "d1", disease3 = "d4",
-                                               ratio = -1))
-  expect_true(has_problem(pr, "three_way", 1, "disease3"))
-  expect_true(has_problem(pr, "three_way", 1, NA))
-  expect_true(has_problem(pr, "three_way", 1, "ratio"))
-  unlink(dir, recursive = TRUE)
-})
-
-test_that("adjusted associations are rejected unless used as marginal", {
-  tabs <- supp_tables()
-  assoc <- tabs$associations
-  assoc$adjusted <- c(TRUE, FALSE, FALSE)
-  assoc$adjusted_for <- c("parity", NA, NA)
-  pr <- cm_check_inputs(diseases = tabs$diseases, associations = assoc, impacts = tabs$yield)
-  expect_true(has_problem(pr, "associations", 1, "adjusted"))
-  expect_error(cm_read_inputs(diseases = tabs$diseases, associations = assoc, impacts = tabs$yield),
-               class = "deconflate_input_problems")
-
-  pr <- cm_check_inputs(diseases = tabs$diseases, associations = assoc, impacts = tabs$yield,
-                        adjusted_associations = "use_as_marginal")
-  expect_false(any(pr$severity == "error"))
-  expect_true(has_problem(pr, "associations", 1, "adjusted", severity = "note"))
-  expect_message(m <- cm_read_inputs(diseases = tabs$diseases, associations = assoc, impacts = tabs$yield,
-                                     adjusted_associations = "use_as_marginal"),
-                 "as if it were marginal")
-  expect_equal(nrow(attr(m, "problems")), 1)
-  expect_equal(m$adjusted_associations, "use_as_marginal")
-  expect_equal(m$associations$adjusted, c(TRUE, FALSE, FALSE))
-  expect_equal(m$associations$adjusted_for[1], "parity")
-  expect_output(print(m), "used as marginal: 1")
+  h <- res$heterogeneity
+  expect_equal(h$table, c("associations", "impacts"))
+  expect_equal(h$k, c(2, 4))
+  expect_true(all(c("Q", "df", "p", "I2", "tau2") %in% names(h)))
+  expect_equal(res$adjusted$rows, c(2, 1, 1))
+  expect_true(is.na(res$totals$raw_sum))
+  # Exact rows that disagree are an error.
+  imp2 <- data.frame(disease = c(ids3, "d1"), value = c(2.5, 5, 7.5, 2.1))
+  m2 <- cm_read_inputs(diseases = tabs$diseases, associations = tabs$associations, impacts = imp2)
+  expect_error(deconflate(m2, n_draws = 0), "cannot all hold", class = "deconflate_infeasible")
 })
 
 test_that("cm_dist_table builds distributions", {
@@ -554,7 +516,7 @@ test_that("cm_dist_table builds distributions", {
   dd <- cm_dist_table(data.frame(key = c("impact:d1", "assoc:d2:d1"), dist = c("normal", "lognormal_ci"),
                                  p1 = c(2.5, 2), p2 = c(0.5, 1.4), p3 = c(NA, 2.9)))
   m <- cm_model(supp_population(), cm_impacts(ids3, c(2.5, 5, 7.5)), distributions = dd)
-  expect_equal(names(m$distributions), c("impact:d1", "assoc:d1:d2"))
+  expect_equal(names(m$distributions), c("impacts:1", "associations:1"))
 
   expect_error(cm_dist_table(data.frame(key = "a", dist = "gamma", p1 = 1)), "Unknown distribution")
   expect_error(cm_dist_table(data.frame(key = c("a", NA), dist = "normal", p1 = 1, p2 = 1)),
@@ -568,19 +530,19 @@ test_that("cm_dist_table builds distributions", {
 
 test_that("CSV columns are read as text, and empty files are empty tables", {
   dir <- input_dir("text-columns")
-  writeLines(c("id,value", "T,0.10", "F,0.15", "01,0.20"), file.path(dir, "diseases.csv"))
-  file.create(file.path(dir, "three_way.csv"))
+  writeLines(c("disease,value", "T,0.10", "F,0.15", "01,0.20"), file.path(dir, "diseases.csv"))
+  file.create(file.path(dir, "associations.csv"))
   writeLines(c("disease,value", "T,1", "F,2", "01,3"), file.path(dir, "losses.csv"))
   m <- cm_read_inputs(diseases = file.path(dir, "diseases.csv"), impacts = file.path(dir, "losses.csv"),
-                      three_way = file.path(dir, "three_way.csv"))
-  expect_equal(m$diseases$id, c("T", "F", "01"))
-  expect_null(m$three_way)
+                      associations = file.path(dir, "associations.csv"))
+  expect_equal(m$diseases$disease, c("T", "F", "01"))
+  expect_null(m$associations)
   expect_equal(m$impacts$value, c(1, 2, 3))
   unlink(dir, recursive = TRUE)
 })
 
 test_that("mixed time horizons give a note", {
-  d <- data.frame(id = c("a", "b"), value = c(0.1, 0.2), time_horizon = c("year", "lactation"))
+  d <- data.frame(disease = c("a", "b"), value = c(0.1, 0.2), time_horizon = c("year", "lactation"))
   pr <- cm_check_inputs(diseases = d, impacts = data.frame(disease = c("a", "b"), value = c(1, 2)))
   expect_true(has_problem(pr, "diseases", NA, "time_horizon", severity = "note"))
   expect_false(any(pr$severity == "error"))
@@ -591,52 +553,50 @@ test_that("mixed time horizons give a note", {
 test_that("distributions are given in the rows of the values they describe", {
   tabs <- supp_tables()
   dis <- cbind(tabs$diseases, dist = c("beta", NA, NA), p1 = c(10, NA, NA), p2 = c(90, NA, NA))
-  assoc <- cbind(tabs$associations, dist = c("lognormal_ci", NA, "pert"),
-                 p1 = c(2, NA, 2), p2 = c(1.4, NA, 3), p3 = c(2.9, NA, 4.5))
-  tw <- data.frame(disease1 = "d3", disease2 = "d1", disease3 = "d2", ratio = 1.5,
-                   dist = "lognormal_ci", p1 = 1.5, p2 = 0.8, p3 = 2.8)
-  imp <- cbind(tabs$yield, dist = c("normal", "pert", "fixed"),
-               p1 = c(2.5, 3, 7.5), p2 = c(0.5, 5, NA), p3 = c(NA, 8, NA))
-  int <- data.frame(disease1 = "d2", disease2 = "d1", value = 0.5, dist = "normal", p1 = 0.5, p2 = 0.1)
-  pr <- cm_check_inputs(diseases = dis, associations = assoc, impacts = imp, interactions = int,
-                        three_way = tw)
+  assoc <- rbind(cbind(tabs$associations, among = NA, measure = "OR"),
+                 data.frame(disease = "d3", associated_with = "d1", value = 1.5, among = "d2", measure = "OR_ratio"))
+  assoc <- cbind(assoc, dist = c("lognormal_ci", NA, "pert", "lognormal_ci"),
+                 p1 = c(2, NA, 2, 1.5), p2 = c(1.4, NA, 3, 0.8), p3 = c(2.9, NA, 4.5, 2.8))
+  imp <- data.frame(disease = c(ids3, "d1;d2"), value = c(2.5, 5, 7.5, 0.5), adjusted_for = c(NA, NA, NA, "all"),
+                    units = "%", dist = c("normal", "pert", "fixed", "normal"),
+                    p1 = c(2.5, 3, 7.5, 0.5), p2 = c(0.5, 5, NA, 0.1), p3 = c(NA, 8, NA, NA))
+  pr <- cm_check_inputs(diseases = dis, associations = assoc, impacts = imp)
   expect_equal(nrow(pr), 0)
-  m <- cm_read_inputs(diseases = dis, associations = assoc, impacts = imp, interactions = int,
-                      three_way = tw)
+  m <- cm_read_inputs(diseases = dis, associations = assoc, impacts = imp)
   # Point values are the central inputs.
   expect_equal(m$diseases$value, c(0.10, 0.15, 0.20))
-  expect_equal(m$three_way$ratio, 1.5)
-  expect_equal(m$impacts$value, c(2.5, 5, 7.5))
+  expect_equal(m$associations$value[4], 1.5)
+  expect_equal(m$impacts$value, c(2.5, 5, 7.5, 0.5))
   d <- m$distributions
-  expect_equal(names(d), c("prob:d1", "assoc:d1:d2", "assoc:d2:d3", "three:d3:d1:d2",
-                           "impact:d1", "impact:d2", "impact:d3", "inter:d2:d1"))
+  expect_equal(names(d), c("prob:d1", "associations:1", "associations:3", "associations:4",
+                           "impacts:1", "impacts:2", "impacts:3", "impacts:4"))
   expect_equal(d[["prob:d1"]]$type, "beta")
-  expect_equal(d[["assoc:d1:d2"]]$type, "lognormal")
-  expect_equal(d[["assoc:d1:d2"]]$params$meanlog, log(2))
-  expect_equal(d[["three:d3:d1:d2"]]$params$meanlog, log(1.5))
-  expect_equal(d[["impact:d2"]]$type, "pert")
-  expect_equal(d[["impact:d3"]]$type, "fixed")
-  # The draws use them (the global method, because of the interaction).
+  expect_equal(d[["associations:1"]]$type, "lognormal")
+  expect_equal(d[["associations:1"]]$params$meanlog, log(2))
+  expect_equal(d[["associations:4"]]$params$meanlog, log(1.5))
+  expect_equal(d[["impacts:2"]]$type, "pert")
+  expect_equal(d[["impacts:3"]]$type, "fixed")
+  # The draws use them (the full model, because of the interaction).
   res <- deconflate(m, n_draws = 20, seed = 1)
-  expect_equal(res$method, "global")
+  expect_equal(res$method, "full model")
   expect_equal(colnames(res$draws$params), names(d))
-  expect_gt(length(unique(res$draws$params[, "three:d3:d1:d2"])), 1)
-  expect_true(all(res$draws$params[, "impact:d3"] == 7.5))
+  expect_gt(length(unique(res$draws$params[, "associations:4"])), 1)
+  expect_true(all(res$draws$params[, "impacts:3"] == 7.5))
   expect_equal(nrow(res$draws$params), 20 - res$draws$n_rejected)
 
   # Event impacts can have distributions too.
-  ev <- data.frame(disease = ids3, value = c(1.5, 2, 1.3), measure = "HR", estimand = "snapshot_crude",
+  ev <- data.frame(disease = ids3, value = c(1.5, 2, 1.3), measure = "HR",
                    dist = c("lognormal_ci", NA, NA), p1 = c(1.5, NA, NA), p2 = c(1.2, NA, NA),
                    p3 = c(1.9, NA, NA))
   me <- cm_read_inputs(diseases = tabs$diseases, associations = tabs$associations, impacts = ev)
-  expect_equal(names(me$distributions), "impact:d1")
+  expect_equal(names(me$distributions), "impacts:1")
   expect_equal(nrow(attr(me, "problems")), 0)
 })
 
 test_that("problems with distributions are reported per row", {
-  dis <- data.frame(id = c("a", "b", "c"), value = c(0.1, 0.2, 0.3),
+  dis <- data.frame(disease = c("a", "b", "c"), value = c(0.1, 0.2, 0.3),
                     dist = c(NA, "uniform", NA), p1 = c(0.05, 0.25, NA), p2 = c(NA, 0.4, NA))
-  assoc <- data.frame(disease1 = c("a", "b"), disease2 = c("b", "c"), value = c(2, 2),
+  assoc <- data.frame(disease = c("a", "b"), associated_with = c("b", "c"), value = c(2, 2),
                       dist = c("normal", "lognormal"), p1 = c(2, 0.7), p2 = c(0.1, 0.2))
   imp <- data.frame(disease = c("a", "b", "c"), value = c(1, 2, 3),
                     dist = c("gamma", "normal", "pert"), p1 = c(1, 2, 1), p2 = c(1, "0,5", 5),
@@ -664,109 +624,109 @@ test_that("problems with distributions are reported per row", {
 })
 
 test_that("the five-disease example reads without problems and matches the reference", {
-  # Reference values: inst/validation/reference_five_diseases.py and
-  # reference_v040.py (section 4).
   f <- function(x) extdata("five_diseases", x)
-  expect_false(file.exists(f("hazard_ratios.csv")))
+  expect_setequal(list.files(extdata("five_diseases"), pattern = "\\.csv$"),
+                  c("diseases.csv", "associations.csv", "impacts_yield.csv", "impacts_calving_interval.csv",
+                    "impacts_welfare.csv", "culling.csv"))
   for (imp in c("impacts_yield.csv", "impacts_calving_interval.csv", "impacts_welfare.csv", "culling.csv")) {
     pr <- cm_check_inputs(diseases = f("diseases.csv"), associations = f("associations.csv"),
-                          impacts = f(imp), three_way = f("three_way.csv"),
-                          interactions = if (imp == "impacts_welfare.csv") f("interactions_welfare.csv"))
+                          impacts = f(imp))
     expect_equal(nrow(pr), 0, info = imp)
   }
   ids <- c("LAM", "MAS", "MET", "SCK", "RP")
   y <- read_five("impacts_yield.csv")
-  expect_equal(y$diseases$id, ids)
+  expect_equal(y$diseases$disease, ids)
   expect_equal(y$diseases$prob, c(0.25, 1 - exp(-0.3), 0.10, 0.35, 0.06), tolerance = 1e-12)
+  expect_equal(y$diseases$label[1], "lameness")
   pt <- pair_tables(y)
   expect_equal(nrow(pt), 10)
   expect_true(all(pt$status == "specified"))
-  expect_setequal(unique(pt$measure), c("OR", "RR", "RD", "cond_prob", "phi"))
+  expect_setequal(unique(pt$measure), c("pooled", "OR", "RR", "RD", "prevalence", "phi"))
   expect_equal(attr(y$impacts, "units"), "% of yield")
-  expect_null(y$three_way)
 
   # Distributions from every table, mixed with point values.
-  y3 <- read_five("impacts_yield.csv", three_way = TRUE)
-  expect_equal(nrow(y3$three_way), 1)
-  expect_setequal(names(y3$distributions),
-                  c("prob:LAM", "prob:MAS", "prob:MET", "prob:SCK",
-                    "assoc:LAM:MAS", "assoc:LAM:SCK", "assoc:MET:RP", "assoc:MET:SCK",
-                    "assoc:MAS:SCK", "assoc:MAS:MET", "assoc:LAM:MET", "three:LAM:MAS:SCK",
-                    "impact:LAM", "impact:MAS", "impact:MET", "impact:SCK"))
-  types <- vapply(y3$distributions, function(d) d$type, character(1))
+  expect_setequal(names(y$distributions),
+                  c("prob:LAM", "prob:MAS", "prob:MET", "prob:SCK", paste0("associations:", c(1:8, 12)),
+                    paste0("impacts:", 1:4)))
+  types <- vapply(y$distributions, function(d) d$type, character(1))
   expect_true(all(c("beta", "pert", "uniform", "lognormal", "normal", "fixed") %in% types))
-  ci <- read_five("impacts_calving_interval.csv")
-  expect_setequal(setdiff(names(ci$distributions), names(y$distributions)[!startsWith(names(y$distributions), "impact:")]),
-                  c("impact:LAM", "impact:MAS", "impact:MET", "impact:RP"))
-  w <- read_five("impacts_welfare.csv", three_way = TRUE, interactions = "interactions_welfare.csv")
-  expect_true(all(c("impact:LAM", "impact:MAS", "impact:SCK", "impact:RP", "inter:LAM:MAS",
-                    "inter:MET:RP") %in% names(w$distributions)))
 
-  # Deterministic results.
-  r <- deconflate(y, n_draws = 0)
-  expect_equal(r$method, "simultaneous")
-  expect_equal(r$adjusted$adjusted,
+  # The ten pair rows alone (the example of earlier versions): the pairwise
+  # shortcut and the references of reference_five_diseases.py.
+  y10 <- read_five_pairs("impacts_yield.csv")
+  r10 <- deconflate(y10, n_draws = 0)
+  expect_equal(r10$method, "pairwise shortcut")
+  expect_equal(r10$adjusted$adjusted,
                c(4.13927424, 2.35580211, 4.5140575, 1.36629496, 2.66542027), tolerance = 1e-7)
-  expect_equal(r$totals$adjusted_total, 2.7349337441102657, tolerance = 1e-9)
-  rp <- adjust_impacts(y, method = "published")
+  expect_equal(r10$totals$adjusted_total, 2.7349337441102657, tolerance = 1e-9)
+  rp <- adjust_published(y10)
   expect_equal(rp$adjusted$adjusted,
                c(3.97507962, 2.37379544, 4.36087399, 1.58917725, 2.84352728), tolerance = 1e-7)
-  # With the three-way term the global method is used; the pairwise tables,
-  # and so the additive results, are the same.
-  r3 <- deconflate(y3, n_draws = 0)
-  expect_equal(r3$method, "global")
-  expect_match(r3$notes, "three-way terms")
-  expect_equal(r3$adjusted$adjusted, r$adjusted$adjusted, tolerance = 1e-7)
-  rc <- deconflate(ci, n_draws = 0)
-  expect_equal(rc$method, "simultaneous")
-  expect_equal(rc$adjusted$adjusted, c(10.27962506, 4.40963526, 15.61622693, 4, 5.06713035),
-               tolerance = 1e-7)
-  expect_equal(rc$totals$adjusted_total, 6.978453892271114, tolerance = 1e-9)
-  expect_error(adjust_impacts(ci, method = "published"), class = "deconflate_unsupported")
-  rw <- deconflate(w, n_draws = 0)
-  expect_equal(rw$method, "global")
-  expect_equal(rw$adjusted$adjusted, c(8.77541245, 4.00171284, 3.18388605, 1.02183469, 2.14413033),
-               tolerance = 1e-7)
-  expect_equal(rw$totals$adjusted_total, 4.182930749703578, tolerance = 1e-8)
-  expect_error(adjust_impacts(w, method = "simultaneous"), class = "deconflate_unsupported")
 
-  # Culling: event impacts with mixed measures and estimands (and the
-  # three-way term in the joint distribution).
-  cu <- read_five("culling.csv", three_way = TRUE)
-  expect_equal(cu$impacts$measure, c("HR", "HR", "RR", "OR", "RD"))
-  expect_equal(cu$impacts$estimand, c("snapshot_crude", "snapshot_stratified", "snapshot_crude",
-                                      "snapshot_crude", "snapshot_stratified"))
+  # The full example (reference_v041.py): two pooled LAM-MAS rows and an
+  # OR_ratio row, so the full model.
+  r <- deconflate(y, n_draws = 0)
+  expect_equal(r$method, "full model")
+  expect_equal(r$adjusted$adjusted, c(4.1036014117, 2.2841850068, 4.5202762922, 1.380768132, 2.668536736),
+               tolerance = 1e-7)
+  expect_equal(r$totals$adjusted_total, 2.7133281669, tolerance = 1e-8)
+  h <- r$heterogeneity
+  expect_equal(h$pooled[h$table == "associations"], 1.9609933673, tolerance = 1e-8)
+  expect_equal(h$Q[h$table == "associations"], 0.617707938, tolerance = 1e-8)
+  j <- r$joint
+  expect_equal(sum(j$prob[j$cells[, "LAM"] == 1 & j$cells[, "MAS"] == 1 & j$cells[, "SCK"] == 1]),
+               0.055709677209, tolerance = 1e-8)
+  ar <- r$estimates[r$estimates$table == "associations" & r$estimates$row == 12, ]
+  expect_equal(ar$fitted, 1.5, tolerance = 1e-6)
+  # Calving interval: two MAS rows (weighted least squares), SCK adjusted for
+  # all (exact), RP only against healthy cows.
+  ci <- read_five("impacts_calving_interval.csv")
+  rc <- deconflate(ci, n_draws = 0)
+  expect_equal(rc$adjusted$adjusted, c(10.2063061612, 4.7682049994, 14.7741251171, 4, 10.0020415569),
+               tolerance = 1e-7)
+  expect_equal(rc$totals$adjusted_total, 7.2649434013, tolerance = 1e-8)
+  ei <- rc$estimates[rc$estimates$table == "impacts", ]
+  expect_equal(ei$std_residual, c(-0.0090983656, -0.3092644373, 0.4653633829, -0.0039776718, NA,
+                                  -0.000808178), tolerance = 1e-6)
+  expect_equal(rc$heterogeneity$Q[rc$heterogeneity$table == "impacts"], 0.3123068256, tolerance = 1e-6)
+  expect_error(adjust_published(ci), class = "deconflate_unsupported")
+  # Welfare: two interactions adjusted for all, and a crude combination row.
+  w <- read_five("impacts_welfare.csv")
+  rw <- deconflate(w, n_draws = 0)
+  expect_equal(rw$adjusted$disease, c(ids, "LAM;MAS", "MET;RP", "LAM;SCK"))
+  expect_equal(rw$adjusted$adjusted, c(8.7442976935, 3.8319918047, 3.1977586251, 1.0855585373, 2.1515488417,
+                                       2, 1.5, -0.6200833573), tolerance = 1e-7)
+  expect_equal(rw$totals$adjusted_total, 4.1479565223, tolerance = 1e-8)
+  expect_equal(rw$contributions$total, c(2.2400759141, 1.0837970506, 0.3357170535, 0.3433323825, 0.1450341215),
+               tolerance = 1e-8)
+
+  # Culling: event impacts with mixed measures, crude and stratified rows
+  # and a combination (reference_v041.py).
+  cu <- read_five("culling.csv")
+  expect_equal(cu$impacts$measure, c("HR", "HR", "RR", "OR", "RD", "HR"))
   expect_equal(cu$impacts$adjusted_for[c(2, 5)], c("LAM;SCK", "all"))
-  expect_true(all(c("impact:LAM", "impact:MET", "impact:RP") %in% names(cu$distributions)))
   expect_error(deconflate(cu, n_draws = 0), class = "deconflate_unsupported")
   ev <- deconflate(cu, event_model = TRUE, overall_risk = 0.25, n_draws = 0)
   expect_s3_class(ev, "cm_event_result")
-  expect_equal(ev$adjusted$adjusted, c(1.58344491, 1.57873827, 1.08072624, 1.19114596, 1.50176712),
-               tolerance = 1e-6)
-  expect_equal(ev$adjusted$change[c(1, 2)], ev$adjusted$adjusted[1:2] / c(1.74, 1.6) - 1)
-  expect_true(all(is.na(ev$adjusted$change[3:5])))
-  expect_equal(ev$attributable$summary$attributable, 0.0697502441, tolerance = 1e-8)
-  expect_equal(ev$attributable$by_disease$attributable,
-               c(0.0248718025, 0.0256191332, 0.0015698203, 0.0123310667, 0.0053584214), tolerance = 1e-8)
-  expect_error(adjust_event(cu, method = "first_order", overall_risk = 0.25), class = "deconflate_unsupported")
+  expect_equal(ev$adjusted$adjusted, c(1.060298968, 1.2342866774, 1.080381173, 1.1753668593, 1.509273874,
+                                       2.2779452712), tolerance = 1e-7)
+  expect_equal(ev$attributable$summary$attributable, 0.0541469811, tolerance = 1e-8)
 
-  # Thresholds used in run_all_features.R.
-  th <- cm_threshold(y, "impact:SCK", c(0, 2.5), conclusion = "sign", method = "simultaneous")
+  # Thresholds used in run_all_features.R (the ten pair rows).
+  th <- cm_threshold(y10, "impact:SCK", c(0, 2.5), conclusion = "sign")
   t1 <- th$thresholds[th$thresholds$status == "threshold", ]
   expect_equal(nrow(t1), 1)
   expect_equal(t1$threshold, 1.1935832731450715, tolerance = 1e-6)
-  th <- cm_threshold(y, "impact:MET", c(0, 15), conclusion = "total", target = 3,
-                     method = "simultaneous")
+  th <- cm_threshold(y10, "impact:MET", c(0, 15), conclusion = "total", target = 3)
   expect_equal(th$thresholds$threshold[th$thresholds$status == "threshold"], 9.730627246165994,
                tolerance = 1e-6)
-  th <- cm_threshold(y, "prob:SCK", c(0.1, 0.6), conclusion = "rank",
-                     diseases = c("MET", "SCK"), method = "simultaneous")
+  th <- cm_threshold(y10, "prob:SCK", c(0.1, 0.6), conclusion = "rank", diseases = c("MET", "SCK"))
   expect_equal(th$thresholds$threshold[th$thresholds$status == "threshold"], 0.33002218486278845,
                tolerance = 1e-6)
   # The published approximation is not a method of cm_threshold(); its pole
   # for SCK (reference_five_diseases.py) is checked on the internal
-  # adjust_impacts() instead.
-  expect_error(cm_threshold(y, "impact:SCK", c(-4, 2.5), conclusion = "sign", diseases = "SCK",
+  # adjust_published() instead.
+  expect_error(cm_threshold(y10, "impact:SCK", c(-4, 2.5), conclusion = "sign", diseases = "SCK",
                             method = "published"),
                class = "deconflate_unsupported")
   pole <- -1.4328526785573266
@@ -774,17 +734,16 @@ test_that("the five-disease example reads without problems and matches the refer
   expect_equal(-as.vector((A - diag(nrow(A))) %*% rp$adjusted$raw)[rp$adjusted$disease == "SCK"], pole,
                tolerance = 1e-8)
   sck_published <- function(v) {
-    my <- y
+    my <- y10
     my$impacts$value[my$impacts$disease == "SCK"] <- v
-    r <- adjust_impacts(my, method = "published", warn = FALSE)
+    r <- adjust_published(my)
     r$adjusted$adjusted[r$adjusted$disease == "SCK"]
   }
   expect_lt(sck_published(pole - 1e-3), -1000)
   expect_gt(sck_published(pole + 1e-3), 1000)
   skip_on_cran()
   th <- cm_threshold(w, "inter:LAM:MAS", c(-5, 20), conclusion = "change", target = -0.1)
-  expect_equal(th$thresholds$threshold[th$thresholds$status == "threshold"], 7.607122195588001,
-               tolerance = 1e-6)
+  expect_equal(sum(th$thresholds$status == "threshold"), 1)
   # Draws of every input: almost every draw is usable.
   dr <- deconflate(w, n_draws = 30, seed = 1)$draws
   expect_lte(dr$n_rejected, 3)

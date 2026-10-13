@@ -2,7 +2,7 @@
 % Please edit documentation in R/compare.R
 \name{compare_methods}
 \alias{compare_methods}
-\title{Compare adjustment methods}
+\title{Compare the model with the published approximation}
 \usage{
 compare_methods(
   model,
@@ -25,7 +25,7 @@ compare_methods(
 
 \item{seed}{Optional random seed for the draws.}
 
-\item{...}{Passed to the adjustment (e.g. \code{joint}, \code{feasibility}, or
+\item{...}{Passed to \code{\link[=deconflate]{deconflate()}}'s model (e.g. \code{joint}, \code{pool}, or
 arguments of \code{\link[=fit_joint]{fit_joint()}}).}
 }
 \value{
@@ -38,33 +38,28 @@ undefined result, with reasons), \code{undefined}, \code{methods}, \code{results
 with draws, \code{draws} (summary of each quantity by method, rejections).
 }
 \description{
-Runs several adjustment methods on the same inputs and tabulates the
-results side by side. For additive impacts:
+Runs the package's model and the earlier approximations on the same inputs
+and tabulates the results side by side. For additive impacts:
 \itemize{
-\item \code{"simultaneous"}: the exact solution from the pairwise tables;
-\item \code{"global"}: the exact solution from the maximum-entropy distribution of
-disease combinations, which also handles interactions, three-way terms
-and unknown pairs;
+\item \code{"deconflate"}: the model of \code{\link[=deconflate]{deconflate()}};
 \item \code{"published"}: the proportional approximation used in Rasmussen et al.
-(2022, 2024) (eq. 16 of the 2022 paper). It is not a method of
-\code{\link[=deconflate]{deconflate()}}; it is kept here (and in the \verb{reproduce_*()} functions)
-to compare earlier results with the exact solution. It applies to crude
-estimates only, can mask incompatible inputs, and is undefined when its
-denominator is zero.
+(2022, 2024) (eq. 16 of the 2022 paper). It is not part of the model;
+it is kept here (and in the \verb{reproduce_*()} functions) to compare
+earlier results with the exact solution. It needs one crude row per
+disease and a crude pair row for every pair, can mask incompatible
+inputs, and is undefined when its denominator is zero.
 }
 }
 \details{
-For event impacts (\code{event_model = TRUE}): \code{"snapshot"} (the model of
-\code{\link[=deconflate]{deconflate()}}), \code{"first_order"} (its log-linear approximation, from the
-pairwise tables) and \code{"published"} (the approach of Rasmussen et al.
-2024: \code{HR - 1} adjusted with eq. 16), each with the attributable risk at
-\code{overall_risk}. The first-order and published methods need hazard (or
-rate) ratios.
+For event impacts (\code{event_model = TRUE}): \code{"deconflate"} (the snapshot
+model of \code{\link[=deconflate]{deconflate()}}), \code{"first_order"} (its log-linear approximation,
+from the pairwise tables) and \code{"published"} (the approach of Rasmussen et
+al. 2024: \code{HR - 1} adjusted with eq. 16), each with the attributable risk
+at \code{overall_risk}. The first-order and published methods need one hazard
+(or rate) ratio per disease and every pair.
 
-Methods run exactly as asked (there is no automatic switch): methods that
-cannot be run (e.g. a pairwise method with unknown pairs, or the published
-approximation for adjusted estimands) are reported with the reason, and
-results with non-finite values are kept apart in \code{undefined}.
+Methods that cannot be run on the inputs are reported with the reason,
+and results with non-finite values are kept apart in \code{undefined}.
 
 With \code{n_draws}, the methods are also applied to the same draws of the
 uncertain inputs (a draw is rejected if any method fails on it), and the

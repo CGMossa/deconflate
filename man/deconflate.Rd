@@ -9,16 +9,15 @@ deconflate(model, ...)
 
 \method{deconflate}{cm_model}(
   model,
-  method = c("auto", "simultaneous", "global"),
   event_model = FALSE,
   overall_risk = NULL,
   n_draws = 1000,
   seed = NULL,
   sampling = c("random", "lhs"),
   lhs_replicates = 10L,
+  pool = c("random", "fixed"),
   joint = NULL,
   warn = TRUE,
-  feasibility = c("screen", "lp", "none"),
   ...
 )
 }
@@ -26,11 +25,8 @@ deconflate(model, ...)
 \item{model}{A \code{\link[=cm_model]{cm_model()}} (e.g. from \code{\link[=cm_read_inputs]{cm_read_inputs()}}) with at least
 one association.}
 
-\item{...}{Passed to \code{\link[=fit_joint]{fit_joint()}} (e.g. \code{backend = "sampled"}).}
-
-\item{method}{\code{"auto"} (default), \code{"simultaneous"} or \code{"global"} (see
-Methods). Not used for event impacts, which always use the snapshot
-model.}
+\item{...}{Passed to \code{\link[=fit_joint]{fit_joint()}} (e.g. \code{backend = "sampled"}). With
+more than 20 diseases the sampled backend is used.}
 
 \item{event_model}{\code{FALSE} (default) for additive impacts; \code{TRUE} for
 event impacts (an impact table with a \code{measure} column).}
@@ -40,11 +36,11 @@ of the event in the population over the period, as a proportion (e.g.
 \code{0.25}), or a distribution (e.g. \code{dist_beta(250, 750)}).}
 
 \item{n_draws}{Number of draws for the uncertainty (default 1000; 0 for
-point estimates only; otherwise at least 2). Used only when some input has a distribution.}
+point estimates only; otherwise at least 2). Used only when some input
+has a distribution.}
 
 \item{seed}{Optional random seed for the draws and for a sampled joint
-distribution (one is chosen and stored
-in the result otherwise).}
+distribution (one is chosen and stored in the result otherwise).}
 
 \item{sampling}{\code{"random"} (default) or \code{"lhs"} (Latin hypercube, in
 \code{lhs_replicates} independent blocks; the Monte Carlo error is then
@@ -53,110 +49,119 @@ estimated from the block means).}
 \item{lhs_replicates}{Number of Latin hypercube blocks (at least 2; at
 most \code{n_draws / 2} are used).}
 
-\item{joint}{Optional \code{\link[=fit_joint]{fit_joint()}} result for the global method or the
-event model. It is checked against the model (diseases, probabilities,
-associations and three-way terms).}
+\item{pool}{\code{"random"} (default) or \code{"fixed"}: how several association
+rows about the same quantity are pooled.}
+
+\item{joint}{Optional \code{\link[=fit_joint]{fit_joint()}} result. It is checked against the
+model (diseases, probabilities and association rows).}
 
 \item{warn}{Logical: warn when adjusted impacts change sign or are not
 finite?}
-
-\item{feasibility}{For the simultaneous method: \code{"screen"} (default;
-triple screen), \code{"lp"} (exact check, needs \code{lpSolve}) or \code{"none"}.}
 }
 \value{
 For additive impacts, a \code{cm_result} with elements:
 \itemize{
-\item \code{adjusted}: raw and adjusted impacts, relative change and estimand
-(with draws, also \code{lower} and \code{upper});
-\item \code{totals}: the sum of \code{p_i * raw_i} (the naive aggregate), the adjusted
-aggregate and its interaction part;
+\item \code{adjusted}: one row per disease and per interaction: the raw value
+(of its row, when it has exactly one), the adjusted value, the
+relative change and the number of rows (with draws, also \code{lower} and
+\code{upper});
+\item \code{totals}: the sum of \code{p_d * raw_d} (the naive aggregate; \code{NA} when a
+disease has several rows), the adjusted aggregate and its interaction
+part;
 \item \code{contributions}: per disease, main and interaction contributions,
 their total and share;
-\item \code{diagnostics}: reconstruction residual, rank and condition number of
-\code{A}, sign changes and the feasibility check;
-\item \code{unknown_pairs}: pairs without an association and the odds ratios the
-global fit gave them;
+\item \code{estimates}: every input row (impacts and associations) with its
+value, fitted value and standardised residual (and, for impact rows,
+the SD used as weight; 0 for an exact row);
+\item \code{heterogeneity}: pooled association rows and the fit of the impact
+rows (Q, df, p, I^2, tau^2), or \code{NULL};
+\item \code{diagnostics}: the computation used (\code{"full model"} or
+\code{"pairwise shortcut"}), reconstruction residual, rank and condition
+number of the row equations, sign changes and the feasibility check;
+\item \code{unknown_pairs}: pairs that no row mentions and the odds ratios the
+fit gave them;
 \item \code{draws}: the uncertainty (summary, accepted draws, rejections, seed),
 or \code{NULL};
-\item \code{notes}, \code{conflation} (\code{A} and \code{offset}), \code{interactions} (matrix of
-\code{delta}), \code{joint_pairs} (matrix of \verb{P(j and k)}), \code{model}, \code{joint},
-\code{method}, \code{label} and \code{units}.
+\item \code{notes}, \code{conflation} (the row equations), \code{joint_pairs} (matrix of
+\verb{P(j and k)}), \code{model}, \code{joint}, \code{method}, \code{label} and \code{units}.
 }
 
-For event impacts, a \code{cm_event_result} with \code{adjusted} (raw estimates
-and adjusted hazard ratios), \code{attributable} (\code{summary}: overall,
-disease-free and attributable risk and the attributable fraction;
-\code{by_disease}: the Shapley allocation; \code{baseline_hazard}), \code{diagnostics},
-\code{unknown_pairs}, \code{draws}, \code{notes}, \code{joint}, \code{model}, \code{method} and
-\code{overall_risk}. Risks are proportions of animals with the event during
-the period.
+For event impacts, a \code{cm_event_result} with \code{adjusted} (adjusted hazard
+ratios of diseases and interactions), \code{attributable} (\code{summary}:
+overall, disease-free and attributable risk and the attributable
+fraction; \code{by_disease}: the Shapley allocation; \code{baseline_hazard}),
+\code{estimates}, \code{heterogeneity}, \code{diagnostics}, \code{unknown_pairs}, \code{draws},
+\code{notes}, \code{joint}, \code{model}, \code{method} and \code{overall_risk}. Risks are
+proportions of animals with the event during the period.
 }
 \description{
 Raw impact estimates (comparisons of animals with and without a disease)
-are treated as conflations of the disease's own impact and the impacts of
-associated diseases. \code{deconflate()} removes the part of each estimate that
-belongs to other diseases, for one impact table at a time: additive
-impacts (the default), or event impacts (\code{event_model = TRUE}). When
-inputs have distributions, it also runs draws (\code{n_draws}) and reports
-intervals.
+are conflations of the disease's own impact and the impacts of associated
+diseases. \code{deconflate()} removes the part of each estimate that belongs to
+other diseases, for one impact table at a time: additive impacts (the
+default), or event impacts (\code{event_model = TRUE}). When inputs have
+distributions, it also runs draws (\code{n_draws}) and reports intervals.
 }
+\section{The model}{
+
+The package has one model. The joint distribution of disease combinations
+is the maximum-entropy distribution that matches the disease
+probabilities and every association row (\code{\link[=fit_joint]{fit_joint()}}); pairs that no
+row mentions are unknown and are filled in by the fit (listed in
+\verb{$unknown_pairs}). Every impact row is then an equation in the unknown
+impacts: an impact for each disease and an interaction for each
+combination that appears in the impact table (see \code{\link[=cm_impacts]{cm_impacts()}} for what
+each row means).
+
+When the impacts are additive and the inputs are only crude pair
+associations (one for every pair) and impact rows about
+single diseases, the pairwise 2x2 tables give exactly the same answer
+(the simultaneous solution of Rasmussen et al. 2022, eq. 14, generalised
+to adjusted estimates), so the package uses them ("pairwise shortcut",
+recorded in the result), and fits the joint distribution once to confirm
+that the associations can hold together (up to 20 diseases). The draws
+then use the shortcut too.
+
+The proportional approximation of Rasmussen et al. (2022, eq. 16) is not
+part of the model: it is kept for comparison and reproduction in
+\code{\link[=compare_methods]{compare_methods()}} and the \verb{reproduce_*()} functions.
+}
+
 \section{Additive impacts}{
 
-For one vector of additive impacts \code{b} (in any units), the raw estimates
-satisfy
-
-\code{raw = A \%*\% b + offset},
-
-where \code{A} depends on the disease probabilities and associations (and on
-each estimate's estimand), and \code{offset} holds the contribution of any
-pairwise interactions. Results are in the units of the impacts supplied.
-
-For a crude estimate of disease \code{i}, \verb{A[i, k] = P(k | i) - P(k | not i)}
-(the excess probability; Rasmussen et al. 2022, eq. 14). For a coefficient
-from an additive regression adjusted for the diseases \code{S}
-(\code{estimand = "adjusted_linear"} in \code{\link[=cm_impacts]{cm_impacts()}}), \code{A[i, k]} is the
-coefficient of \code{D_i} in the population linear projection of \code{D_k} on
-\code{D_i} and \code{D_S}, and \code{A[i, S] = 0}. These coefficients depend only on the
-pairwise tables. They assume the probabilities and associations describe
-the population the estimates come from. An adjustment set that is
-collinear with the disease is not identifiable and is rejected.
-
-With interactions \code{delta}, the offset of disease \code{i} is the corresponding
-regression coefficient of the interaction burden
-\verb{sum_\{j<k\} delta[j, k] D_j D_k}, which needs the joint distribution of
-disease combinations.
+With impacts \code{b} and interactions \code{delta}, the outcome of an animal with
+disease combination \code{c} is \verb{y(c) = sum_d b_d c_d + sum_T delta_T all_T(c)}.
+Each impact row is a linear function of \code{b} and \code{delta}: for a crude row,
+the difference in mean outcome between animals with all the row's
+diseases and animals with none of them (within \code{among}); for an adjusted
+row, a regression coefficient. Results are in the units of the impacts.
 
 The expected aggregate impact per animal is
-\verb{sum_i p_i b_i + sum_\{j<k\} P(j and k) delta[j, k]}. Each disease's
-contribution is its own term plus half of each interaction term it is
-involved in (the closed-form Shapley value); contributions add up to the
-aggregate. Shares are \code{NA} when the aggregate is zero.
+\verb{sum_d p_d b_d + sum_T P(T) delta_T}. Each disease's contribution is its
+own term plus an equal share of each interaction it is part of (the
+closed-form Shapley value); contributions add up to the aggregate. Shares
+are \code{NA} when the aggregate is zero.
 }
 
-\section{Methods}{
+\section{Several rows per item}{
 
-\itemize{
-\item The simultaneous method solves \verb{raw = A b} exactly from the pairwise
-2x2 tables. No joint distribution is needed, so it works for any number
-of diseases.
-\item The global method fits the maximum-entropy distribution of disease
-combinations (\code{\link[=fit_joint]{fit_joint()}}; the "iterative" model) and solves the same
-equations, including any interactions. Pairs without an association are
-unknown: the fit fills them in from the other associations.
-}
+Impact rows are fitted together: with one row per unknown the equations
+are solved exactly; with more rows, by weighted least squares with weights
+1/SD^2 (SDs from each row's distribution; a row without a distribution is
+exact and is reproduced exactly). The result reports each row's fitted
+value and standardised residual (\verb{$estimates}) and the heterogeneity
+statistic Q (\verb{$heterogeneity}). Two exact rows that contradict each other
+are an error.
 
-The two give the same results when every pair has an association, there
-are no interactions and no three-way terms. \code{method = "auto"} (the
-default) uses the simultaneous method then, and the global method
-otherwise, with a note giving the reason; \code{"simultaneous"} behaves the
-same way (the global method is used when it is needed), and \code{"global"}
-always uses the global method. The global method's exact backend
-enumerates 2^n combinations; with more than 20 diseases the sampled
-backend is used (see \code{\link[=fit_joint]{fit_joint()}}).
-
-The proportional approximation of Rasmussen et al. (2022, eq. 16) is not a
-method here: it is kept for comparison and reproduction in
-\code{\link[=compare_methods]{compare_methods()}} and the \verb{reproduce_*()} functions.
+Association rows that describe the same quantity are pooled on the log
+odds ratio scale of their 2x2 table (the logit of a prevalence, the log
+of an \code{OR_ratio}, or, for rows of different kinds about the same
+quantity, the logit of its probability), inverse-variance weighted, with random effects (DerSimonian-Laird) by
+default and \code{pool = "fixed"} as an option; Q, I^2 and tau^2 are in
+\verb{$heterogeneity}. A row without a distribution is exact and wins. In the
+draws, each row is drawn from its own distribution and pooled with the
+central weights, and a between-study term keeps the pooled variance at
+its random-effects value.
 }
 
 \section{Event impacts}{
@@ -164,33 +169,24 @@ method here: it is kept for comparison and reproduction in
 With \code{event_model = TRUE}, the impact table holds event impacts (hazard
 ratios, rate ratios, risk ratios, odds ratios or risk differences; see
 \code{\link[=cm_impacts]{cm_impacts()}}), which are adjusted with the snapshot hazard model. Within
-the period of the overall risk, an animal with disease combination \code{d} has
-a constant hazard \verb{h0 * exp(sum_i beta_i d_i)}, so its risk over the
-period is \verb{R(d) = 1 - exp(-h0 * exp(sum_i beta_i d_i))}; \code{h0} is set so
-that the population risk, averaged over the joint distribution of disease
-combinations, equals \code{overall_risk}. The \code{beta}s are solved so that each
-raw estimate is reproduced:
-\itemize{
-\item a hazard ratio or rate ratio by the ratio of the average hazard
-multipliers among animals with and without the disease;
-\item a risk ratio, odds ratio or risk difference by the ratio, odds ratio or
-difference of the average risks \code{R} among animals with and without the
-disease;
-}
-
-at the start of the period (crude), or within strata of the estimate's
-adjustment set, combined with Mantel-Haenszel-type weights (stratified).
-The adjusted hazard ratios \code{exp(beta)} are each disease's own hazard
-multiplier. The risk attributable to disease is \code{overall_risk} minus the
-disease-free risk \code{1 - exp(-h0)}; an animal's risk cannot exceed 1, so it
-is smaller than the sum of per-disease excess risks when diseases
-co-occur. It is allocated to diseases by Shapley values over disease
-combinations (\code{\link[=shapley_by_cell]{shapley_by_cell()}}).
+the period of the overall risk, an animal with disease combination \code{c} has
+a constant hazard \verb{h0 * exp(sum_d beta_d c_d + sum_T gamma_T all_T(c))}, so
+its risk over the period is \code{R(c) = 1 - exp(-h0 * exp(...))}; \code{h0} is set
+so that the population risk equals \code{overall_risk}. The \code{beta}s and
+\code{gamma}s (interactions on the log-hazard scale) are solved so that each
+raw estimate is reproduced: a hazard or rate ratio by the ratio of the
+average hazard multipliers of the two groups the row compares; a risk
+ratio, odds ratio or risk difference by those of their average risks;
+crude, or within strata of the row's adjustment set (combined with
+Mantel-Haenszel-type weights). The adjusted hazard ratios \code{exp(beta)} are
+each disease's own hazard multiplier. The risk attributable to disease is
+\code{overall_risk} minus the disease-free risk \code{1 - exp(-h0)}, allocated to
+diseases by Shapley values over disease combinations (\code{\link[=shapley_by_cell]{shapley_by_cell()}}).
 
 What the snapshot model is not: a Cox hazard ratio estimated over
 follow-up is not, in general, the snapshot ratio, because animals with
 high hazards leave first and the mixture of disease combinations among
-survivors changes. The model is exact for its own estimands and a
+survivors changes. The model is exact for its own comparisons and a
 reasonable approximation when follow-up is short relative to the hazards
 or the diseases are rare. Risk-based estimates (risk ratios, odds ratios,
 risk differences) must refer to the same period as \code{overall_risk}.
@@ -205,20 +201,9 @@ way as the central estimate. The central estimate uses the point values
 (\code{value}, and the mean of an \code{overall_risk} distribution); the draws give
 95\% intervals (2.5\% and 97.5\% quantiles), means, Monte Carlo standard
 errors and stability checks (\verb{$draws$summary}). Draws whose values cannot
-hold together (e.g. associations that no population can have at once) are
-rejected and counted (\verb{$draws$rejections}), not replaced; notes in
-\verb{$notes} report a high rejection share and limited Monte Carlo precision.
-Without distributions, no draws are run.
-}
-
-\section{Feasibility}{
-
-Pairwise tables can each be valid while no population has all of them
-(an invertible \code{A} does not mean the inputs are feasible). The
-simultaneous method screens every triple of diseases (a necessary
-condition; see \code{\link[=check_feasibility]{check_feasibility()}}); \code{feasibility = "lp"} runs the exact
-check. The global method fits the joint distribution, and stops if it
-does not converge.
+hold together are rejected and counted (\verb{$draws$rejections}), not
+replaced; notes in \verb{$notes} report a high rejection share and limited
+Monte Carlo precision. Without distributions, no draws are run.
 }
 
 \examples{
@@ -226,12 +211,13 @@ res <- deconflate(example_supplement())
 res$adjusted
 res$totals
 
-# A coefficient adjusted for one other disease
+# An estimate adjusted for one other disease, and a second estimate for d1
 m <- example_supplement()
-m$impacts <- cm_impacts(c("d1", "d2", "d3"), c(2.2, 5, 7.5),
-                        estimand = c("adjusted_linear", "crude", "crude"),
-                        adjusted_for = c("d2", NA, NA), units = "\%")
-deconflate(m)$adjusted
+m$impacts <- cm_impacts(c("d1", "d1", "d2", "d3"), c(2.2, 2.6, 5, 7.5),
+                        adjusted_for = c("d2", NA, NA, NA), units = "\%")
+m$distributions <- list("impacts:1" = dist_normal(2.2, 0.4),
+                        "impacts:2" = dist_normal(2.6, 0.5))
+deconflate(m, n_draws = 0)$estimates
 
 # Uncertain inputs
 m2 <- cm_model(example_supplement(), example_supplement()$impacts,
@@ -242,6 +228,6 @@ deconflate(m2, n_draws = 200, seed = 1)
 # Event impacts (culling): hazard ratios and a risk ratio
 cull <- cm_model(example_supplement(),
                  cm_impacts(c("d1", "d2", "d3"), c(1.5, 2.0, 1.2), measure = c("HR", "HR", "RR"),
-                            estimand = "snapshot_crude", label = "culling"))
+                            label = "culling"))
 deconflate(cull, event_model = TRUE, overall_risk = 0.25)
 }

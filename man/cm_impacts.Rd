@@ -7,45 +7,46 @@
 cm_impacts(
   disease,
   value,
-  estimand = NULL,
+  ...,
+  among = NA_character_,
   adjusted_for = NA_character_,
+  measure = NULL,
+  study = NA_character_,
   source = NA_character_,
+  note = NA_character_,
   label = NULL,
-  units = NULL,
-  measure = NULL
+  units = NULL
 )
 }
 \arguments{
-\item{disease}{Character vector of disease ids (one row per disease).}
+\item{disease}{Character vector of disease ids or combinations (\code{"a;b"}).}
 
-\item{value}{Numeric raw impacts. Every disease in the model needs a value
-(for no effect: 0 for additive impacts and risk differences, 1 for
-ratios).}
+\item{value}{Numeric raw impacts.}
 
-\item{estimand}{Additive impacts: \code{"crude"} (default) or
-\code{"adjusted_linear"}. Event impacts: \code{"snapshot_crude"} or
-\code{"snapshot_stratified"} (required). One per row or recycled.}
+\item{...}{Not used (arguments of earlier versions give a message). The
+arguments after it must be named.}
 
-\item{adjusted_for}{For \code{"adjusted_linear"} and \code{"snapshot_stratified"}:
-the diseases the estimate was adjusted for, separated by \code{";"} (e.g.
-\code{"LAM; CM"}), or \code{"all"}.}
+\item{among, adjusted_for}{Optional subgroups and adjustment sets (see What
+a row means).}
 
-\item{source}{Optional citation.}
+\item{measure}{\code{NULL} (default) for additive impacts; for event impacts,
+one measure per row or recycled.}
+
+\item{study, source, note}{Optional study label, citation and note.}
 
 \item{label, units}{Optional table-level metadata (e.g.
 \code{label = "milk yield loss"}, \code{units = "\% of yield"}), carried into the
 results.}
-
-\item{measure}{\code{NULL} (default) for additive impacts; for event impacts,
-one measure per row or recycled (see Event impacts).}
 }
 \value{
 A \code{cm_impacts} data frame (attributes \code{label}, \code{units} and
 \code{kind}, \code{"additive"} or \code{"event"}).
 }
 \description{
-One impact table holds one raw estimate per disease for one outcome. There
-are two kinds:
+One impact table holds the estimates of one outcome, one row per
+estimate. A disease can have several rows (e.g. from several studies, or
+crude and adjusted), and a row can be about a combination of diseases or
+a subgroup. There are two kinds of impact table:
 }
 \details{
 \itemize{
@@ -54,50 +55,49 @@ the same for every row (e.g. kg of milk, percent of yield, days, a
 welfare score). The package does not convert units; results come back
 in the units supplied. Adjust them with \code{\link[=deconflate]{deconflate()}}.
 \item \strong{Event impacts} (\code{measure} given): comparisons of the risk of an event
-(e.g. death or culling) between animals with and without the disease,
-as hazard ratios, rate ratios, risk ratios, odds ratios or risk
-differences. Adjust them with \code{deconflate(..., event_model = TRUE)},
-which uses the snapshot hazard model.
+(e.g. death or culling), as hazard ratios (\code{"HR"}), rate ratios
+(\code{"rate_ratio"}), risk ratios (\code{"RR"}), odds ratios (\code{"OR"}) or risk
+differences (\code{"RD"}), which can be mixed. Adjust them with
+\code{deconflate(..., event_model = TRUE)} (snapshot hazard model).
 }
-
-For several outcomes, make one impact table each and adjust each in turn.
 }
-\section{Estimands of additive impacts}{
+\section{What a row means}{
 
+The model has an impact for each disease and an interaction for each
+combination that appears in \code{disease}. A row compares animals with all
+the diseases in \code{disease} against animals with none of them (for one
+disease: with against without), within the subgroup \code{among} (as in
+\code{\link[=cm_associations]{cm_associations()}}, including \code{"no others"}, e.g. "only this disease
+against healthy animals").
 \itemize{
-\item \code{"crude"} (default): the difference in the outcome between animals with
-and without the disease (unadjusted for other diseases).
-\item \code{"adjusted_linear"}: the coefficient of the disease in an additive
-(linear) regression of the outcome on the disease and the diseases in
-\code{adjusted_for}, in the same source population. The adjustment then uses
-the population projection of the omitted diseases (see \code{\link[=deconflate]{deconflate()}}).
-\code{adjusted_for = "all"} means every other disease in the model.
+\item Crude (empty \code{adjusted_for}): the difference in the outcome between the
+two groups (event impacts: the ratio or difference of their hazards or
+risks).
+\item Adjusted (\code{adjusted_for} names diseases, separated by \code{";"}): additive
+impacts are coefficients of a linear regression of the outcome on the
+disease (for a combination: its members, their smaller combinations and
+the combination itself) and the diseases in \code{adjusted_for}; event
+impacts are comparisons within strata of those diseases (for a
+combination, the interaction contrast), combined with
+Mantel-Haenszel-type weights. \code{"all"} means every other disease and
+combination term of the model: the row is then the term's own value (a
+combination adjusted for \code{all} is its interaction; for event impacts
+this holds for hazard and rate ratios). Within a subgroup \code{among}
+naming present diseases, it is the sum of the term and the terms that
+combine it with those diseases (e.g. \code{a} among \code{c}, adjusted for all,
+is the impact of \code{a} plus the \verb{a;c} interaction, when the model has
+one). Names that are not diseases of the model are factors outside the
+model, ignored with a note.
 }
 
-Other adjusted estimands (e.g. matched or propensity-score estimates) are
-not supported. The probabilities and associations must describe the
-population the estimates come from.
-}
-
-\section{Event impacts}{
-
-\code{measure} is one of \code{"HR"} (hazard ratio), \code{"rate_ratio"}, \code{"RR"} (risk
-ratio over the period), \code{"OR"} (odds ratio of the event over the period)
-or \code{"RD"} (risk difference over the period); measures can be mixed. The
-estimand must be stated (there is no default, because it is an
-assumption):
-\itemize{
-\item \code{"snapshot_crude"}: the comparison of animals with and without the
-disease at the start of the period, in the population described by the
-probabilities and associations (unadjusted for other diseases);
-\item \code{"snapshot_stratified"}: the same comparison within strata of the
-diseases in \code{adjusted_for}, combined across strata with
-Mantel-Haenszel-type weights; with \code{adjusted_for = "all"} a hazard
-ratio is the disease's own hazard multiplier.
-}
+Every disease needs at least one row of its own (for no effect: 0 for
+additive impacts and risk differences, 1 for ratios). The rows must
+determine every impact and interaction; \code{\link[=deconflate]{deconflate()}} says which are not
+determined otherwise. Several rows about the same impacts are fitted
+together by weighted least squares (see \code{\link[=deconflate]{deconflate()}}).
 
 A Cox hazard ratio estimated over follow-up is not exactly a snapshot
-estimand (see \code{\link[=deconflate]{deconflate()}}, "Event impacts"); entering one as such is an
+comparison (see \code{\link[=deconflate]{deconflate()}}, "Event impacts"); entering one is an
 approximation and the user's assumption. Risk ratios, odds ratios and
 risk differences refer to the period of the overall risk given to
 \code{\link[=deconflate]{deconflate()}}.
@@ -105,7 +105,10 @@ risk differences refer to the period of the overall risk given to
 
 \examples{
 cm_impacts(c("d1", "d2", "d3"), c(2.5, 5, 7.5), label = "yield", units = "\%")
+# Two estimates for d1, and the interaction of d1 and d2
+cm_impacts(c("d1", "d1", "d2", "d3", "d1;d2"), c(2.5, 2.1, 5, 7.5, 1),
+           adjusted_for = c(NA, "d2", NA, NA, "all"), units = "\%")
 # Event impacts: culling, with mixed measures
 cm_impacts(c("d1", "d2", "d3"), c(1.5, 1.3, 0.04), measure = c("HR", "RR", "RD"),
-           estimand = "snapshot_crude", label = "culling")
+           label = "culling")
 }

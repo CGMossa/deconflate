@@ -28,7 +28,7 @@ for comparison (see `vignette("deconflate")` and `vignette("event-impacts")`).
 The papers also treated every pair of diseases without a published odds
 ratio as independent. The reproduction functions do the same. The package
 default is different: a pair without an association is unknown, and
-`deconflate()` fills it in with the global method (see
+`deconflate()` fills it in from the other associations (see
 `vignette("interactions")`). To compare the published approximation with the
 exact solution under the papers' assumption, the sections below give the
 unlisted pairs an odds ratio of 1 with this helper:
@@ -38,6 +38,7 @@ independent_pairs <- function(m) {
   pt <- pair_tables(m)
   u <- pt[pt$status == "unknown", , drop = FALSE]
   a <- rbind(m$associations, cm_associations(u$disease1, u$disease2, 1))
+  a$row <- seq_len(nrow(a))
   cm_model(m$diseases, m$impacts, associations = a)
 }
 ```
@@ -51,7 +52,7 @@ solution; the gap is computed from the published result in base R, as in
 `vignette("deconflate")`, for an observed level of 10,000 units:
 
 ```{r}
-cmp_sup <- compare_methods(example_supplement(), methods = c("published", "simultaneous"))
+cmp_sup <- compare_methods(example_supplement(), methods = c("published", "deconflate"))
 cmp_sup$impacts
 pub <- cmp_sup$results$published
 disease_free <- 10000 / (1 - pub$totals$adjusted_total / 100)
@@ -138,7 +139,7 @@ data.frame(disease = r22$adjusted$disease,
 
 ### What the package offers instead
 
-**Exact solution.** The simultaneous method solves the additive equations
+**Exact solution.** `deconflate()` solves the additive equations
 instead of approximating them. With the unlisted pairs independent, as in
 the paper, every pair has an odds ratio and both methods can run. The gaps
 and values below use Table 1 in base R: milk yield of 8737 kg/cow/year
@@ -150,8 +151,8 @@ kg of milk:
 uk_yield <- independent_pairs(example_uk_dairy_2022("yield"))
 uk_fert <- independent_pairs(example_uk_dairy_2022("fertility"))
 uk_yield
-tt_y <- compare_methods(uk_yield, methods = c("published", "simultaneous"))$totals
-tt_f <- compare_methods(uk_fert, methods = c("published", "simultaneous"))$totals
+tt_y <- compare_methods(uk_yield, methods = c("published", "deconflate"))$totals
+tt_f <- compare_methods(uk_fert, methods = c("published", "deconflate"))$totals
 tt_y$gap <- 8737 / (1 - tt_y$adjusted_total / 100) - 8737
 tt_y$value <- tt_y$gap * 0.3022
 tt_f$gap <- 401 - 401 / (1 + tt_f$adjusted_total / 100)
@@ -161,11 +162,11 @@ rbind(cbind(outcome = "yield", tt_y), cbind(outcome = "fertility", tt_f))
 
 The published rows reproduce the yield and fertility values of the
 reproduction above (GBP 169.90 and 101.78 per cow per year). The
-simultaneous method gives GBP 168.00 for yield and 95.43 for fertility. The
+model gives GBP 168.00 for yield and 95.43 for fertility. The
 published total from `reproduce_rasmussen_2022()$total` (GBP 402.25) also
 includes culling, valued with the paper's conversion, and veterinary costs.
 That culling conversion is not available for new analyses, so no
-simultaneous total including culling is given here.
+total including culling is given here.
 
 **Culling as event impacts.** For new analyses, the culling hazard ratios
 are event impacts, adjusted with the snapshot hazard model
@@ -176,7 +177,7 @@ unlisted pairs independent and the paper's annual culling rate of 27%:
 
 ```{r}
 uk_cull <- independent_pairs(example_uk_dairy_2022("culling"))
-compare_methods(uk_cull, methods = c("published", "snapshot"),
+compare_methods(uk_cull, methods = c("published", "deconflate"),
                 event_model = TRUE, overall_risk = 0.27)
 ```
 
@@ -262,14 +263,14 @@ subclinical ketosis and subclinical mastitis), the published approximation
 extreme values. For subclinical ketosis the Monte Carlo mean does not settle
 even with 200,000 draws, and for subclinical mastitis the archived inputs
 give 0.52% rather than the 0.04% in Table 5. Medians, or the exact
-(simultaneous) solution, are more robust summaries. The `stability` column
+solution, are more robust summaries. The `stability` column
 flags estimates whose means are unreliable (see `vignette("uncertainty")`):
 
 ```{r}
 cmp24[cmp24$analysis == "fertility", c("disease", "table5", "mean", "median", "stability")]
 ```
 
-The simultaneous solution at the central values, with the unlisted pairs
+The exact solution at the central values, with the unlisted pairs
 independent as in the paper, shows the inconsistency directly. Several
 adjusted impacts change sign, while the aggregates move less (about 3% for
 yield and 18% for fertility):
@@ -277,8 +278,8 @@ yield and 18% for fertility):
 ```{r}
 gd_yield <- independent_pairs(example_global_dairy("yield"))
 gd_fert <- independent_pairs(example_global_dairy("fertility"))
-cmp_y <- compare_methods(gd_yield, methods = c("published", "simultaneous"))
-cmp_f <- compare_methods(gd_fert, methods = c("published", "simultaneous"))
+cmp_y <- compare_methods(gd_yield, methods = c("published", "deconflate"))
+cmp_f <- compare_methods(gd_fert, methods = c("published", "deconflate"))
 cmp_y$diagnostics[, c("method", "sign_changes")]
 cmp_f$diagnostics[, c("method", "sign_changes")]
 data.frame(method = cmp_y$totals$method, yield = cmp_y$totals$adjusted_total,
@@ -287,16 +288,16 @@ data.frame(method = cmp_y$totals$method, yield = cmp_y$totals$adjusted_total,
 
 **The package default: unknown pairs.** `example_global_dairy()` itself
 leaves the 28 pairs that are not in Table 3 unknown, as for any input in this
-package, so `deconflate()` uses the global method: the maximum-entropy fit
+package, and `deconflate()` fills them in: the maximum-entropy fit
 gives each unknown pair the association implied by the associations both
 diseases have with other diseases, instead of an odds ratio of 1. For the
 yield impacts at the central values (no draws):
 
 ```{r}
 gd_default <- deconflate(example_global_dairy("yield"), n_draws = 0, warn = FALSE)
-gd_default$notes
+gd_default$diagnostics$method
 range(gd_default$unknown_pairs$fitted_or)
-c(independent = cmp_y$totals$adjusted_total[cmp_y$totals$method == "simultaneous"],
+c(independent = cmp_y$totals$adjusted_total[cmp_y$totals$method == "deconflate"],
   unknown = gd_default$totals$adjusted_total)
 gd_default$diagnostics$sign_changes
 ```
@@ -305,8 +306,8 @@ The fit gives the 28 unknown pairs odds ratios between 1.08 and 2.37, all
 above 1, so animals with one disease are expected to have more of the
 others than under independence. More of each raw impact is then attributed
 to associated diseases, and the aggregate yield loss falls from 7.49% (unknown
-pairs independent, simultaneous method) to 6.92% (unknown pairs filled in,
-global method). The same four diseases
+pairs independent) to 6.92% (unknown pairs filled in). The same four
+diseases
 change sign (CK, CM, DA, MF). Neither assumption is identified by the
 published odds ratios; `screen_associations()` shows which unknown pairs
 matter most (`vignette("uncertainty")`).

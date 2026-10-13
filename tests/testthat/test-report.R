@@ -35,7 +35,7 @@ test_that("contribution tables of event results and of results with draws", {
 })
 
 test_that("legacy gaps follow the direction and effect of the impacts", {
-  pub <- adjust_impacts(example_supplement(), method = "published")
+  pub <- adjust_published(example_supplement())
   g <- legacy_gap(pub, observed = 10000, direction = "decrease", effect = "percent")
   expect_equal(names(g$summary), c("observed", "disease_free", "gap", "aggregate", "direction", "effect"))
   expect_equal(names(g$attribution), c("disease", "gap", "gap_main", "gap_interaction"))
@@ -47,7 +47,7 @@ test_that("legacy gaps follow the direction and effect of the impacts", {
                tolerance = 1e-9)
   expect_equal(g$attribution$gap_interaction, c(0, 0, 0))
   # Percent and proportion impacts give the same gap.
-  pub_prop <- adjust_impacts(supp_model(c(0.025, 0.05, 0.075)), method = "published")
+  pub_prop <- adjust_published(supp_model(c(0.025, 0.05, 0.075)))
   expect_equal(legacy_gap(pub_prop, 10000, "decrease", "proportion")$summary$gap, g$summary$gap,
                tolerance = 1e-10)
   # An outcome that disease increases.
@@ -71,7 +71,7 @@ test_that("legacy gaps follow the direction and effect of the impacts", {
 })
 
 test_that("legacy_value values a gap", {
-  pub <- adjust_impacts(example_supplement(), method = "published")
+  pub <- adjust_published(example_supplement())
   g <- legacy_gap(pub, 10000, "decrease", "percent")
   vl <- legacy_value(g, unit_value = 0.3)
   expect_equal(names(vl), c("by_disease", "value"))
@@ -94,7 +94,7 @@ test_that("zero aggregates give NA shares but valid legacy gaps and values", {
   v0 <- legacy_value(g0, 0.3)
   expect_equal(v0$value, 0)
   expect_equal(v0$by_disease$value, c(0, 0, 0))
-  expect_equal(adjust_impacts(supp_model(c(0, 0, 0)), method = "published")$adjusted$adjusted, c(0, 0, 0))
+  expect_equal(adjust_published(supp_model(c(0, 0, 0)))$adjusted$adjusted, c(0, 0, 0))
   expect_true(all(is.na(contribution_table(res0)$share)))
   # A zero naive sum has no defined reduction.
   expect_true(is.na(summary(res0)$totals$reduction))
@@ -123,7 +123,7 @@ test_that("zero aggregates give NA shares but valid legacy gaps and values", {
 })
 
 test_that("summary() reports totals and contributions", {
-  res <- adjust_impacts(example_supplement(), method = "published")
+  res <- adjust_published(example_supplement())
   s <- summary(res)
   expect_s3_class(s, "summary.cm_result")
   expect_equal(s$method, "published")
@@ -135,11 +135,11 @@ test_that("summary() reports totals and contributions", {
   expect_equal(s$totals$reduction, 1 - 2.1110887443997908 / 2.5, tolerance = 1e-10)
   expect_equal(s$contributions, contribution_table(res))
   expect_false("valuation" %in% names(formals(summary.cm_result)))
-  expect_output(print(s), "Comorbidity adjustment \\(method: published\\) - yield \\[%\\]")
+  expect_output(print(s), "Comorbidity adjustment \\(published\\) - yield \\[%\\]")
   expect_output(print(s), "Feasibility")
   ssim <- summary(deconflate(example_supplement()))
-  expect_equal(ssim$method, "simultaneous")
-  expect_output(print(ssim), "Comorbidity adjustment \\(method: simultaneous\\) - yield \\[%\\]")
+  expect_equal(ssim$method, "pairwise shortcut")
+  expect_output(print(ssim), "Comorbidity adjustment \\(pairwise shortcut\\) - yield \\[%\\]")
   # Sign changes are printed.
   ss <- summary(deconflate(supp_model(c(0.1, 5, 7.5)), warn = FALSE))
   expect_output(print(ss), "Sign changes: d1")
@@ -148,15 +148,16 @@ test_that("summary() reports totals and contributions", {
   expect_s3_class(se, "summary.cm_result")
   expect_equal(se$method, "snapshot")
   expect_equal(se$totals$attributable, 0.03664898509534775, tolerance = 1e-7)
-  expect_output(print(se), "Comorbidity adjustment \\(method: snapshot\\)")
-  # Notes are carried over (here: the automatic switch to the global method).
-  su <- summary(deconflate(cm_model(supp_unknown_population(), cm_impacts(ids3, c(2.5, 5, 7.5)))))
-  expect_true(any(grepl("global method was used", su$notes)))
-  expect_output(print(su), "Note: The global method was used")
+  expect_output(print(se), "Comorbidity adjustment \\(snapshot\\)")
+  # Notes are carried over.
+  su <- summary(deconflate(cm_model(supp_unknown_population(), cm_impacts(ids3, c(2.5, 5, 7.5),
+                                                                          adjusted_for = c("parity", NA, NA)))))
+  expect_true(any(grepl("factors outside the model", su$notes)))
+  expect_output(print(su), "Note: Impact row 1 is adjusted only")
 })
 
 test_that("the legacy helpers reproduce the published total value (2022)", {
-  res <- lapply(uk_dairy_2022_analyses(3.05, culling = TRUE), adjust_impacts, method = "published")
+  res <- lapply(uk_dairy_2022_analyses(3.05, culling = TRUE), adjust_published)
   eco <- uk_dairy_2022_economics()
   eco$valuation$culling <- uk_dairy_2022_culling_valuation()
   vls <- lapply(names(res), function(nm) {
@@ -177,10 +178,11 @@ test_that("plots draw without error", {
   grDevices::pdf(NULL)
   on.exit(grDevices::dev.off())
   uk <- example_uk_dairy_2022()
-  res <- adjust_impacts(cm_model(with_independent_pairs(as_population(uk)), uk$impacts), method = "published")
+  res <- adjust_published(cm_model(with_independent_pairs(as_population(uk)), uk$impacts))
   expect_invisible(plot(res))
   expect_invisible(plot_burden(res))
   expect_invisible(plot_burden(deconflate(example_supplement())))
+  expect_invisible(plot(deconflate(read_five("impacts_welfare.csv"), n_draws = 0)))
   expect_false("valuation" %in% names(formals(plot_burden)))
   expect_invisible(plot(screen_associations(example_supplement())))
   expect_invisible(plot(sensitivity_oat(example_supplement())))

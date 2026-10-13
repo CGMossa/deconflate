@@ -17,10 +17,8 @@ reference:
   contents:
   - cm_diseases
   - cm_associations
-  - cm_three_way
   - cm_population
   - cm_impacts
-  - cm_interactions
   - cm_model
   - set_association
   - set_interaction

@@ -6,27 +6,28 @@
 \usage{
 screen_associations(
   model,
-  method = "auto",
   event_model = FALSE,
   overall_risk = NULL,
   or_values = c(0.5, 2),
   multipliers = c(0.5, 2),
-  pairs = NULL
+  pairs = NULL,
+  ...
 )
 }
 \arguments{
 \item{model}{A \code{\link[=cm_model]{cm_model()}}.}
 
-\item{method}{As in \code{\link[=deconflate]{deconflate()}}.}
-
 \item{event_model, overall_risk}{As in \code{\link[=deconflate]{deconflate()}} (a distribution of
 the overall risk is used at its mean).}
 
-\item{or_values}{Odds ratios tried for pairs without an association.}
+\item{or_values}{Odds ratios tried for pairs without a crude pair row.}
 
-\item{multipliers}{Factors applied to given associations.}
+\item{multipliers}{Factors applied to the crude pair rows of a pair (all
+of them, when a pair has several).}
 
 \item{pairs}{Optional character vector of pairs (\code{"d1:d2"}); default all.}
+
+\item{...}{Not used.}
 }
 \value{
 A \code{cm_screen} data frame sorted by the absolute relative change in
@@ -49,8 +50,7 @@ et al. (2022), Fig. 3 and Rasmussen et al. (2024), Fig. 7C-D.
 The model needs no associations: with none, the baseline has every
 disease independent (adjusted impacts equal the raw ones), and the screen
 shows which pairs would matter if they were associated. Each scenario is
-adjusted as \code{\link[=deconflate]{deconflate()}} would (point estimates; the method is chosen
-for the scenario's own inputs, see \code{method}).
+adjusted as \code{\link[=deconflate]{deconflate()}} would (point estimates).
 
 The total is the adjusted aggregate for additive impacts, and the risk
 attributable to disease for event impacts (\code{event_model = TRUE}); disease

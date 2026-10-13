@@ -4,12 +4,7 @@
 \alias{cm_population}
 \title{Describe the population: diseases and their associations}
 \usage{
-cm_population(
-  diseases,
-  associations = NULL,
-  three_way = NULL,
-  adjusted_associations = c("error", "use_as_marginal")
-)
+cm_population(diseases, associations = NULL, ...)
 }
 \arguments{
 \item{diseases}{A \code{\link[=cm_diseases]{cm_diseases()}} object.}
@@ -18,24 +13,15 @@ cm_population(
 needs at least one association; the sensitivity tools (e.g.
 \code{\link[=screen_associations]{screen_associations()}}) also run without any.}
 
-\item{three_way}{Optional \code{\link[=cm_three_way]{cm_three_way()}} object.}
-
-\item{adjusted_associations}{Covariate-adjusted association measures are
-not marginal 2x2 associations. \code{"error"} (default) rejects them;
-\code{"use_as_marginal"} uses them as if they were marginal, which is an
-approximation, and records this.}
+\item{...}{Not used (arguments of earlier versions give a message).}
 }
 \value{
 A \code{cm_population} object.
 }
 \description{
-A population holds the disease probabilities, the pairwise associations
-and, optionally, three-way association scenarios. Combine it with one
-impact table in \code{\link[=cm_model]{cm_model()}}.
-}
-\details{
-Pairs without an association are unknown: the global model fills in
-their association from the others (see \code{\link[=fit_joint]{fit_joint()}}).
+A population holds the disease probabilities and the association rows.
+Combine it with one impact table in \code{\link[=cm_model]{cm_model()}}. Every row is checked
+against the diseases (see \code{\link[=cm_associations]{cm_associations()}} for what a row means).
 }
 \examples{
 pop <- cm_population(

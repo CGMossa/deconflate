@@ -47,33 +47,27 @@ test_that("the LP check agrees and identifies the conflict", {
   expect_output(print(f), "NOT jointly feasible")
 })
 
-test_that("the pairwise methods screen triples by default", {
+test_that("deconflate() checks that the associations can hold together", {
   m <- t2_bad_model()
   expect_error(deconflate(m), class = "deconflate_infeasible")
   # The published approximation (internal; compare_methods() and reproduce)
   # is screened too.
-  expect_error(adjust_impacts(m, method = "published"), class = "deconflate_infeasible")
-  expect_warning(res <- deconflate(m, feasibility = "none"), class = "deconflate_sign_change")
-  expect_s3_class(res, "cm_result")
-  expect_equal(res$diagnostics$feasibility, "unchecked")
+  expect_error(adjust_published(m), class = "deconflate_infeasible")
   res_s <- deconflate(example_supplement())
-  expect_equal(res_s$diagnostics$feasibility, "triple screen passed (necessary condition only)")
-  skip_if_not_installed("lpSolve")
-  expect_error(deconflate(m, feasibility = "lp"), class = "deconflate_infeasible")
-  res <- deconflate(example_supplement(), feasibility = "lp")
-  expect_equal(res$diagnostics$feasibility, "LP check passed (jointly feasible)")
+  expect_match(res_s$diagnostics$feasibility, "^joint distribution fitted")
+  expect_error(deconflate(m, feasibility = "lp"), "has been removed", class = "deconflate_unsupported")
 })
 
-test_that("the global method stops when the joint distribution does not converge", {
+test_that("the full model stops when the joint distribution does not converge", {
   m <- t2_bad_model()
-  expect_error(suppressWarnings(deconflate(m, method = "global", max_iter = 300)),
-               class = "deconflate_nonconvergence")
-  expect_warning(j <- fit_joint(m, max_iter = 300), class = "deconflate_nonconvergence")
+  m$associations <- rbind(m$associations, cm_associations("a", "b", 2, measure = "OR_ratio", among = "c")[, names(m$associations)])
+  m$associations$row <- 1:4
+  # Not the shortcut (an OR_ratio row): the joint fit fails.
+  expect_error(suppressWarnings(deconflate(m, max_iter = 300)))
+  expect_warning(j <- fit_joint(t2_bad_model(), max_iter = 300), class = "deconflate_nonconvergence")
   expect_false(j$converged)
-  expect_error(deconflate(m, method = "global", joint = j), class = "deconflate_nonconvergence")
   # So does the event model, which always uses the joint distribution.
-  ev <- cm_model(t2_bad_pop(), cm_impacts(c("a", "b", "c"), c(1.5, 2, 1.3), measure = "HR",
-                                          estimand = "snapshot_crude"))
+  ev <- cm_model(t2_bad_pop(), cm_impacts(c("a", "b", "c"), c(1.5, 2, 1.3), measure = "HR"))
   expect_error(suppressWarnings(deconflate(ev, event_model = TRUE, overall_risk = 0.25, max_iter = 300)),
                class = "deconflate_nonconvergence")
 })

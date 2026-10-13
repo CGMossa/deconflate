@@ -1,40 +1,43 @@
 #' Fit the maximum-entropy distribution of disease combinations
 #'
-#' The global model needs the probability of every combination of diseases.
-#' Pairwise tables do not determine it (for three or more diseases there are
-#' 2^n - 1 free probabilities and n(n+1)/2 constraints), so the package uses
-#' the maximum-entropy distribution that matches the disease probabilities
-#' and every specified pairwise table: a log-linear model with main effects
-#' and the two-way terms of the constrained pairs, plus any three-way terms
-#' from [cm_three_way()]. This is an assumption, not something the pairwise
-#' evidence identifies. Pairs without an association (unknown pairs) are not
-#' constrained: their association is whatever the maximum-entropy fit implies
-#' given the others. A pair given an odds ratio of 1 is constrained to be
-#' independent.
+#' The model needs the probability of every combination of diseases. The
+#' association rows do not determine it (for three or more diseases there are
+#' 2^n - 1 free probabilities), so the package uses the maximum-entropy
+#' distribution that matches the disease probabilities and every association
+#' row: the distribution that assumes as little as possible beyond the
+#' inputs. Pairs that no row mentions (unknown pairs) are not constrained:
+#' their association is whatever the fit implies given the others. A pair
+#' given an odds ratio of 1 is constrained to be independent.
+#'
+#' Every association row fixes the probability of one event: for a pair row,
+#' the probability of both diseases; for a row within a subgroup, of both
+#' diseases within it; for a combination, of all its diseases together (see
+#' [cm_associations()]). Several rows about the same event are pooled (see
+#' [deconflate()]). For rows whose event probability depends on other
+#' probabilities (e.g. an odds ratio within a subgroup, whose margins are
+#' themselves fitted), the targets are recomputed at the current fit until
+#' they no longer move.
 #'
 #' @section Exact backend:
 #' `backend = "exact"` enumerates all 2^n combinations. Starting from
-#' independence (the product of marginal probabilities; slide 12 of the 2023
-#' seminar), with the three-way terms put into the starting distribution,
-#' iterative proportional fitting (IPF) rescales the combination
-#' probabilities until every pairwise table and marginal is matched. IPF
-#' keeps every log-linear term of its start that the constraints do not fix,
-#' so the result is the maximum-entropy distribution with the requested
-#' three-way terms. Enumeration limits this backend to about 20 diseases.
+#' independence (the product of the disease probabilities; slide 12 of the
+#' 2023 seminar), iterative proportional fitting on events rescales the
+#' combination probabilities until every event probability and disease
+#' probability is matched. The result is the maximum-entropy distribution
+#' with those event probabilities. Enumeration limits this backend to about
+#' 20 diseases.
 #'
 #' @section Sampled backend:
-#' `backend = "sampled"` fits the same log-linear model without enumerating
-#' combinations, for larger numbers of diseases:
+#' `backend = "sampled"` fits the same model without enumerating
+#' combinations, for larger numbers of diseases, when every association row
+#' is a crude pair row:
 #' 1. Calibration: the model's parameters (a main effect per disease and an
-#'    interaction per constrained pair; three-way terms fixed at the log of
-#'    their ratios) are fitted by Monte Carlo moment matching. Gibbs sampling
-#'    from many parallel chains estimates the probabilities and pairwise
-#'    tables implied by the current parameters, and the parameters are
-#'    updated (by the differences in logits and log odds ratios between the
-#'    targets and the estimates) until the estimates match the targets
-#'    within Monte Carlo error. The interaction parameters are conditional
-#'    log odds ratios; they are not set equal to the marginal log odds ratios
-#'    of the inputs (those are only the starting values).
+#'    interaction per constrained pair) are fitted by Monte Carlo moment
+#'    matching. Gibbs sampling from many parallel chains estimates the
+#'    probabilities and pairwise tables implied by the current parameters,
+#'    and the parameters are updated (by the differences in logits and log
+#'    odds ratios between the targets and the estimates) until the estimates
+#'    match the targets within Monte Carlo error.
 #' 2. Sampling: `n_samples` combinations are drawn from the calibrated model.
 #' 3. Optionally (`calibrate = TRUE`, the default), the weights of the sampled
 #'    combinations are adjusted by IPF so that the disease probabilities and
@@ -42,26 +45,23 @@
 #'    remaining Monte Carlo error then affects only higher-order structure.
 #'
 #' The result has the same form as the exact one (`cells` are the distinct
-#' sampled combinations, `prob` their weights), so the global method,
-#' interaction offsets, Shapley allocation and the snapshot hazard model of
-#' event impacts work with it. Its `diagnostics` give the constraint
-#' residuals of the raw sample and after raking, R-hat and effective sample
-#' sizes of the fitted probabilities across chains, and the Monte Carlo
-#' errors. Results are approximations with Monte Carlo error: compare runs
-#' with different seeds, and with the exact backend where n allows.
+#' sampled combinations, `prob` their weights). Its `diagnostics` give the
+#' constraint residuals of the raw sample and after raking, R-hat and
+#' effective sample sizes across chains, and the Monte Carlo errors. Results
+#' have Monte Carlo error: compare runs with different seeds, and with the
+#' exact backend where n allows.
 #'
 #' @section Convergence:
-#' If the pairwise tables are jointly infeasible, the exact IPF does not
+#' If the association rows cannot all hold together, the fit does not
 #' converge. Non-convergence after `max_iter` sweeps suggests, but does not
 #' prove, infeasibility (see [check_feasibility()]). For the sampled backend,
 #' a calibration that does not converge is reported as unresolved, not as
 #' evidence that the inputs are infeasible.
 #'
 #' @param model A [cm_population()] or [cm_model()].
-#' @param tol Convergence tolerance of the IPF: maximum absolute deviation of
-#'   any constrained cell probability, recomputed on the returned
-#'   distribution.
-#' @param max_iter Maximum number of full IPF sweeps.
+#' @param tol Convergence tolerance: maximum absolute deviation of any event
+#'   or disease probability from its target.
+#' @param max_iter Maximum number of full sweeps.
 #' @param max_diseases Safety limit on the number of diseases for the exact
 #'   backend (the table has 2^n cells).
 #' @param backend `"exact"` (default) or `"sampled"`.
@@ -75,17 +75,20 @@
 #' @param calibrate Sampled backend: adjust the sample weights to match the
 #'   targets exactly?
 #' @param seed Optional random seed (sampled backend).
-#' @param start Optional earlier exact fit to start the IPF from (e.g. the fit
-#'   at the central inputs, when refitting for a draw of the inputs). It is
-#'   used only when it has the same diseases, constrained pairs and three-way
-#'   terms; the result is then the same maximum-entropy distribution, found
-#'   in fewer sweeps.
+#' @param start Optional earlier exact fit to start from (e.g. the fit at the
+#'   central inputs, when refitting for a draw of the inputs). It is used
+#'   only when it has the same diseases and association rows (only their
+#'   values may differ); the result is then the same maximum-entropy
+#'   distribution, found in fewer sweeps.
+#' @param pool `"random"` (default) or `"fixed"`: how several association
+#'   rows about the same quantity are pooled (see [deconflate()]).
 #'
 #' @return A `cm_joint` object: `cells` (0/1 matrix of combinations), `prob`
 #'   (probability of each combination), `converged`, `iterations`,
 #'   `max_residual`, `backend`, the `targets` it was fitted to (used by
-#'   [deconflate()] to check that a supplied joint matches the model) and,
-#'   for the sampled backend, `diagnostics`.
+#'   [deconflate()] to check that a supplied joint matches the model), the
+#'   pooling of association rows (`pooling`) and, for the sampled backend,
+#'   `diagnostics`.
 #' @export
 #' @examples
 #' j <- fit_joint(example_supplement())
@@ -97,21 +100,40 @@
 fit_joint <- function(model, tol = 1e-10, max_iter = 10000L, max_diseases = 20L,
                       backend = c("exact", "sampled"), n_samples = 50000L, n_chains = 1000L,
                       burn_in = 50L, fit_iter = 300L, calibrate = TRUE, seed = NULL,
-                      start = NULL) {
+                      start = NULL, pool = c("random", "fixed")) {
   check_population(model)
   backend <- match.arg(backend)
-  ids <- model$diseases$id
+  pool <- match.arg(pool)
+  fit_joint_at(model, tol = tol, max_iter = max_iter, max_diseases = max_diseases, backend = backend,
+               n_samples = n_samples, n_chains = n_chains, burn_in = burn_in, fit_iter = fit_iter,
+               calibrate = calibrate, seed = seed, start = start, pool = pool)
+}
+
+# fit_joint() with the pooling of a draw (`frozen` weights and `between`
+# deviates; see draws.R).
+fit_joint_at <- function(model, tol = 1e-10, max_iter = 10000L, max_diseases = 20L,
+                         backend = "exact", n_samples = 50000L, n_chains = 1000L,
+                         burn_in = 50L, fit_iter = 300L, calibrate = TRUE, seed = NULL,
+                         start = NULL, pool = "random", frozen = NULL, between = NULL) {
+  ids <- model$diseases$disease
   p <- model$diseases$prob
   n <- length(ids)
-  tw <- model$three_way
-  pt <- pair_tables(model)
-  cons <- pt[!is.na(pt$p11), , drop = FALSE]
-  targets <- list(prob = p, pairs = cons[, c("disease1", "disease2", "p11")],
-                  three_way = if (is.null(tw)) NULL else as.data.frame(tw))
+  specs <- association_specs(model)
+  groups <- association_groups(specs)
+  targets <- list(prob = p, signature = population_signature(model, pool),
+                  structure = population_structure(model))
   if (backend == "sampled") {
-    return(fit_joint_sampled(model, ids, p, tw, cons, targets, tol = tol, max_iter = max_iter,
+    if (!all(vapply(groups, `[[`, logical(1), "pair"))) {
+      cm_abort("The sampled backend (for more than 20 diseases) supports crude pair rows only; rows within subgroups, adjusted rows, combinations and OR_ratio rows need the exact backend (at most 20 diseases).",
+               class = "deconflate_unsupported")
+    }
+    pt <- pair_tables_at(model, pool, frozen, between)
+    cons <- pt[!is.na(pt$p11), , drop = FALSE]
+    out <- fit_joint_sampled(model, ids, p, cons, targets, tol = tol, max_iter = max_iter,
                              n_samples = n_samples, n_chains = n_chains, burn_in = burn_in,
-                             fit_iter = fit_iter, calibrate = calibrate, seed = seed))
+                             fit_iter = fit_iter, calibrate = calibrate, seed = seed)
+    out$pooling <- attr(pt, "pooling")
+    return(out)
   }
   if (n > max_diseases) {
     cm_abort(sprintf("%d diseases give 2^%d cells; use backend = \"sampled\", or increase `max_diseases` if intended.", n, n))
@@ -119,25 +141,22 @@ fit_joint <- function(model, tol = 1e-10, max_iter = 10000L, max_diseases = 20L,
   cells <- disease_cells(n)
   colnames(cells) <- ids
   logp <- as.vector(cells %*% log(p) + (1 - cells) %*% log(1 - p))
-  if (!is.null(tw) && nrow(tw)) {
-    for (r in seq_len(nrow(tw))) {
-      k <- match(c(tw$disease1[r], tw$disease2[r], tw$disease3[r]), ids)
-      logp <- logp + log(tw$ratio[r]) * cells[, k[1]] * cells[, k[2]] * cells[, k[3]]
-    }
-  }
   prob <- exp(logp - max(logp))
   prob <- prob / sum(prob)
-  if (warm_start_ok(start, ids, cons, tw)) prob <- start$prob
-  fit <- ipf_cells(cells, prob, p, cons, ids, tol, max_iter)
+  if (warm_start_ok(start, ids, targets$structure)) prob <- start$prob
+  fit <- fit_events(model, cells, prob, groups, tol = tol, max_iter = max_iter, pool = pool,
+                    frozen = frozen, between = between)
   if (!fit$converged) {
     cm_warn(sprintf(
-      "IPF did not converge after %d sweeps (max residual %.2e). The pairwise tables may be jointly infeasible; see check_feasibility().",
+      "The joint distribution did not converge after %d sweeps (max residual %.2e). The association rows may not be able to hold together; see check_feasibility().",
       fit$iterations, fit$residual), class = "deconflate_nonconvergence")
   }
   structure(list(cells = cells, prob = fit$prob, diseases = ids,
                  converged = fit$converged, iterations = fit$iterations, max_residual = fit$residual,
-                 constrained_pairs = cons[, c("disease1", "disease2", "measure", "status")],
-                 targets = targets, backend = "exact"),
+                 n_rows = length(specs), targets = targets, backend = "exact",
+                 pooling = list(groups = groups, info = fit$pooling, pool = pool,
+                                frozen = freeze_pooling(groups, fit$pooling)),
+                 fit = fit),
             class = "cm_joint")
 }
 
@@ -145,30 +164,38 @@ fit_joint <- function(model, tol = 1e-10, max_iter = 10000L, max_diseases = 20L,
 joint_arg_names <- c("tol", "max_iter", "max_diseases", "backend", "n_samples", "n_chains",
                      "burn_in", "fit_iter", "calibrate", "seed")
 
-# Can an earlier exact fit be the start of the IPF? IPF keeps the log-linear
-# terms of its start that the constraints do not fix, so the start must be a
-# converged fit of the same family: the same diseases, the same constrained
-# pairs and the same three-way terms (only the targets may differ).
-warm_start_ok <- function(start, ids, cons, tw) {
+# The structure of a population (diseases and association rows without their
+# values), and its full signature (with the values).
+population_structure <- function(model) {
+  a <- model$associations
+  rows <- if (is.null(a) || !nrow(a)) "" else
+    paste(a$row, a$disease, a$associated_with, a$among, a$adjusted_for, a$measure, sep = "/", collapse = "|")
+  paste(paste(model$diseases$disease, collapse = ","), rows, sep = "#")
+}
+
+population_signature <- function(model, pool = "random") {
+  a <- model$associations
+  vals <- if (is.null(a) || !nrow(a)) "" else paste(signif(a$value, 12), collapse = ",")
+  d <- model$distributions
+  dk <- if (length(d)) paste(sort(names(d)[startsWith(names(d), "associations:")]), collapse = ",") else ""
+  paste(population_structure(model), paste(signif(model$diseases$prob, 12), collapse = ","), vals, dk, pool,
+        sep = "#")
+}
+
+# Can an earlier exact fit be the start? IPF keeps the log-linear terms of
+# its start that the constraints do not fix, so the start must be a
+# converged fit with the same diseases and association rows (only the values
+# may differ).
+warm_start_ok <- function(start, ids, structure) {
   if (is.null(start)) return(FALSE)
-  if (!inherits(start, "cm_joint") || !identical(start$backend, "exact") || !isTRUE(start$converged) ||
-      !identical(start$diseases, ids) || length(start$prob) != 2^length(ids) || any(start$prob <= 0)) {
-    return(FALSE)
-  }
-  tg <- start$targets$pairs
-  if (is.null(tg) || !setequal(pair_key(tg$disease1, tg$disease2), pair_key(cons$disease1, cons$disease2))) {
-    return(FALSE)
-  }
-  sig <- function(t) {
-    if (is.null(t) || !nrow(t)) return(character(0))
-    sort(paste(apply(t[, c("disease1", "disease2", "disease3")], 1,
-                     function(x) paste(sort(x), collapse = "|")), signif(t$ratio, 12)))
-  }
-  identical(sig(tw), sig(start$targets$three_way))
+  inherits(start, "cm_joint") && identical(start$backend, "exact") && isTRUE(start$converged) &&
+    identical(start$diseases, ids) && length(start$prob) == 2^length(ids) && all(start$prob > 0) &&
+    identical(start$targets$structure, structure)
 }
 
 # Iterative proportional fitting of the weights `prob` of the combinations
-# `cells` to the marginals `p` and the constrained pairwise tables `cons`.
+# `cells` to the marginals `p` and the constrained pairwise tables `cons`
+# (used to calibrate the sampled backend).
 ipf_cells <- function(cells, prob, p, cons, ids, tol, max_iter) {
   n <- length(ids)
   idx <- match(c(cons$disease1, cons$disease2), ids)
@@ -247,7 +274,7 @@ gibbs_sweep <- function(X, h, J, tri) {
   X
 }
 
-fit_joint_sampled <- function(model, ids, p, tw, cons, targets, tol, max_iter, n_samples,
+fit_joint_sampled <- function(model, ids, p, cons, targets, tol, max_iter, n_samples,
                               n_chains, burn_in, fit_iter, calibrate, seed) {
   if (!is.null(seed)) set.seed(seed)
   n <- length(ids)
@@ -263,10 +290,6 @@ fit_joint_sampled <- function(model, ids, p, tw, cons, targets, tol, max_iter, n
     log(t11) + log(t00) - log(t10) - log(t01)
   }
   tri <- matrix(numeric(0), 0, 4)
-  if (!is.null(tw) && nrow(tw)) {
-    tri <- cbind(match(tw$disease1, ids), match(tw$disease2, ids), match(tw$disease3, ids),
-                 log(tw$ratio))
-  }
   # Start: independence plus the marginal log odds ratios of the targets
   # (starting values only; they are calibrated below).
   h <- logit(p)
@@ -417,16 +440,16 @@ fit_joint_sampled <- function(model, ids, p, tw, cons, targets, tol, max_iter, n
   structure(list(cells = cells, prob = prob, diseases = ids, converged = converged,
                  iterations = it, max_residual = resid_final,
                  constrained_pairs = cons[, c("disease1", "disease2", "measure", "status")],
-                 targets = targets, backend = "sampled", diagnostics = diag),
+                 n_rows = sum(!is.na(cons$p11)), targets = targets, backend = "sampled", diagnostics = diag),
             class = "cm_joint")
 }
 
 # Check that a joint distribution belongs to a population: same diseases in
-# the same order, matching marginals, pairwise tables and three-way terms,
-# and converged. Impact-only changes do not invalidate a joint.
-validate_joint <- function(joint, model, tol = 1e-7) {
+# the same order, the same disease probabilities and association rows, and
+# converged. Impact-only changes do not invalidate a joint.
+validate_joint <- function(joint, model, pool = "random") {
   if (!inherits(joint, "cm_joint")) cm_abort("`joint` must come from fit_joint().")
-  ids <- model$diseases$id
+  ids <- model$diseases$disease
   stale <- function(why) {
     cm_abort(sprintf("The supplied joint distribution does not match the model (%s); refit it with fit_joint().", why))
   }
@@ -436,26 +459,13 @@ validate_joint <- function(joint, model, tol = 1e-7) {
              class = "deconflate_nonconvergence")
   }
   tp <- joint$targets$prob
-  if (is.null(tp) || length(tp) != length(ids) || max(abs(tp - model$diseases$prob)) > tol) {
+  if (is.null(tp) || length(tp) != length(ids) || max(abs(tp - model$diseases$prob)) > 1e-7) {
     stale("disease probabilities")
   }
-  pt <- pair_tables(model)
-  cons <- pt[!is.na(pt$p11), , drop = FALSE]
-  tg <- joint$targets$pairs
-  if (is.null(tg)) stale("no recorded targets")
-  key_m <- pair_key(cons$disease1, cons$disease2)
-  key_j <- pair_key(tg$disease1, tg$disease2)
-  if (!setequal(key_m, key_j)) stale("different constrained pairs")
-  if (max(abs(cons$p11 - tg$p11[match(key_m, key_j)]), 0) > tol) stale("pairwise associations")
-  tw_m <- model$three_way
-  tw_j <- joint$targets$three_way
-  sig <- function(tw) {
-    if (is.null(tw) || !nrow(tw)) return(character(0))
-    sort(paste(apply(tw[, c("disease1", "disease2", "disease3")], 1,
-                     function(x) paste(sort(x), collapse = "|")),
-               signif(tw$ratio, 10)))
+  if (!identical(joint$targets$structure, population_structure(model))) stale("different association rows")
+  if (!identical(joint$targets$signature, population_signature(model, pool))) {
+    stale("association values, their distributions or the pooling")
   }
-  if (!identical(sig(tw_m), sig(tw_j))) stale("three-way terms")
   invisible(joint)
 }
 

@@ -3,9 +3,10 @@
 # The CSV files in this folder describe an illustrative dairy population
 # with five diseases (LAM lameness, MAS mastitis, MET metritis, SCK
 # subclinical ketosis, RP retained placenta) and four impact tables: yield
-# (% of yield), calving interval (days), welfare (score points, with
-# interactions) and culling (event impacts: hazard ratios, a risk ratio, an
-# odds ratio and a risk difference). The values are made up to exercise the
+# (% of yield), calving interval (days, with several rows for one disease and
+# a subgroup row), welfare (score points, with interactions) and culling
+# (event impacts: hazard ratios, a risk ratio, an odds ratio, a risk
+# difference and an interaction). The values are made up to exercise the
 # package; they are not estimates. See README.md for what each file
 # contains.
 #
@@ -68,105 +69,126 @@ try_plot <- function(expr) {
 # ---- 1. Read and check the inputs -------------------------------------------
 section("1. Reading the inputs")
 
-# Every table is its own argument, with any file name. One impact table per
-# model: the disease, association and three-way tables are shared.
-read_five <- function(impacts, interactions = NULL, three_way = TRUE,
-                      associations = f("associations.csv")) {
-  cm_read_inputs(diseases = f("diseases.csv"), associations = associations,
-                 impacts = f(impacts),
-                 interactions = if (!is.null(interactions)) f(interactions),
-                 three_way = if (three_way) f("three_way.csv"))
+# Three tables, each its own argument, with any file name. One impact table
+# per model: the disease and association tables are shared.
+read_five <- function(impacts, associations = f("associations.csv")) {
+  cm_read_inputs(diseases = f("diseases.csv"), associations = associations, impacts = f(impacts))
 }
 
 # No problems are expected (a note is printed if any).
 print(cm_check_inputs(diseases = f("diseases.csv"), associations = f("associations.csv"),
-                      impacts = f("impacts_yield.csv"), three_way = f("three_way.csv")))
-m_yield <- read_five("impacts_yield.csv", three_way = FALSE)
+                      impacts = f("impacts_yield.csv")))
+m_yield <- read_five("impacts_yield.csv")
 m_yield
 m_yield$diseases                # MAS is an incidence rate, converted to a probability
-pair_tables(m_yield)            # the 2x2 table of every pair, from each measure
+m_yield$associations            # every kind of association row (see the note column)
+pair_tables(m_yield)            # the 2x2 table of every pair; LAM-MAS pools two rows
 names(m_yield$distributions)    # the distributions given in the tables
 
-m_yield3 <- read_five("impacts_yield.csv")                            # with the three-way term
-m_ci <- read_five("impacts_calving_interval.csv", three_way = FALSE)
-m_welfare <- read_five("impacts_welfare.csv", interactions = "interactions_welfare.csv")
+m_ci <- read_five("impacts_calving_interval.csv")
+m_welfare <- read_five("impacts_welfare.csv")
 m_cull <- read_five("culling.csv")
-m_yield3$three_way              # a three-way scenario
+m_ci$impacts                    # two MAS rows, an adjusted row, a subgroup row
+m_welfare$impacts               # combination rows: interactions
 m_cull$impacts                  # event impacts: a measure column
+
+# The yield model with only the ten crude pair rows (the layout of earlier
+# versions): the pairwise tables then give the answer directly
+assoc <- utils::read.csv(f("associations.csv"), stringsAsFactors = FALSE)
+m_pairs <- read_five("impacts_yield.csv", associations = assoc[-c(2, 12), ])
 
 # ---- 2. Feasibility and the joint distribution ------------------------------
 section("2. Feasibility and the joint distribution")
 
-feas <- check_feasibility(m_yield3)  # triple screen, plus an LP check if lpSolve is installed
+feas <- check_feasibility(m_yield)  # triple screen, plus an LP check if lpSolve is installed
 feas$feasible
-joint <- fit_joint(m_yield3)          # exact maximum-entropy joint (32 combinations), with the three-way term
+joint <- fit_joint(m_yield)          # exact maximum-entropy joint (32 combinations), matching every row
 joint
 head(combination_probs(joint), 10)
 sum(combination_probs(joint)$prob[combination_probs(joint)$n_diseases >= 3])
+# The OR_ratio row: the LAM-MAS odds ratio among cows with and without SCK
+or_in <- function(j, among) {
+  w <- j$prob * (j$cells[, "SCK"] == among)
+  c11 <- sum(w[j$cells[, "LAM"] == 1 & j$cells[, "MAS"] == 1])
+  c10 <- sum(w[j$cells[, "LAM"] == 1 & j$cells[, "MAS"] == 0])
+  c01 <- sum(w[j$cells[, "LAM"] == 0 & j$cells[, "MAS"] == 1])
+  c00 <- sum(w[j$cells[, "LAM"] == 0 & j$cells[, "MAS"] == 0])
+  c11 * c00 / (c10 * c01)
+}
+or_in(joint, 1) / or_in(joint, 0)    # 1.5, as the row says
 
-# The sampled backend (used automatically above 20 diseases), compared with
-# the exact one
-joint_s <- fit_joint(m_yield3, backend = "sampled", n_samples = 20000, n_chains = 500, seed = 1)
+# The sampled backend (used automatically above 20 diseases) handles crude
+# pair rows only; compared with the exact one on the pair-only model
+joint_p <- fit_joint(m_pairs)
+joint_s <- fit_joint(m_pairs, backend = "sampled", n_samples = 20000, n_chains = 500, seed = 1)
 joint_s
 joint_s$diagnostics$summary
 n_dis <- function(j) tapply(j$prob, rowSums(j$cells), sum)
-rbind(exact = n_dis(joint), sampled = n_dis(joint_s))
+rbind(exact = n_dis(joint_p), sampled = n_dis(joint_s))
+try_show(fit_joint(m_yield, backend = "sampled", n_samples = 2000, n_chains = 100, seed = 1))
 
 # ---- 3. Adjustment -----------------------------------------------------------
 section("3. Adjustment")
 
-# yield: crude impacts, every pair has an association, no interactions or
-# three-way terms: method = "auto" uses the simultaneous method. n_draws = 0
-# gives point estimates only (uncertainty is in section 5).
+# yield: crude impacts, one row per disease. The association rows include a
+# pooled pair and an OR_ratio row, so the full model is fitted.
+# n_draws = 0 gives point estimates only (uncertainty is in section 5).
 res_yield <- deconflate(m_yield, n_draws = 0)
 res_yield
-# With the three-way term, "auto" switches to the global method (a note says
-# why). With every pair given and no interactions, the result is the same.
-res_yield3 <- deconflate(m_yield3, n_draws = 0, joint = joint)
-res_yield3$notes
-all.equal(res_yield3$adjusted$adjusted, res_yield$adjusted$adjusted)
+res_yield$diagnostics$method
+res_yield$heterogeneity          # the two LAM-MAS studies, pooled (random effects)
+res_yield$estimates              # every row with its fitted value
+deconflate(m_yield, n_draws = 0, pool = "fixed")$heterogeneity
+# Only crude pair rows: the pairwise tables give the answer directly
+res_pairs <- deconflate(m_pairs, n_draws = 0)
+res_pairs$diagnostics$method
+# The OR_ratio row keeps the pairwise tables fixed: with the same pair rows,
+# it changes additive results without interactions not at all
+m_pairs_or <- read_five("impacts_yield.csv", associations = assoc[-2, ])
+all.equal(deconflate(m_pairs_or, n_draws = 0)$adjusted$adjusted, res_pairs$adjusted$adjusted)
 # The published approximation (Rasmussen et al. 2022, eq. 16) is not a method
-# of deconflate(); compare_methods() shows it beside the others, for
+# of deconflate(); compare_methods() shows it beside the model, for
 # comparison only
-compare_methods(m_yield)$impacts
+compare_methods(m_pairs)$impacts
 
-# calving interval: MAS and SCK are regression coefficients (adjusted_linear)
+# calving interval: two MAS rows (one adjusted for SCK, one crude) fitted
+# together by weighted least squares, SCK adjusted for all (exact), and RP
+# among cows with no other disease
 res_ci <- deconflate(m_ci, n_draws = 0)
 res_ci$adjusted
-compare_methods(m_ci)$failed   # the published approximation: crude estimates only
+res_ci$estimates[res_ci$estimates$table == "impacts", ]
+res_ci$heterogeneity
+compare_methods(m_ci)$failed   # the published approximation: one crude row per disease only
 
-# welfare: interactions switch "auto" to the global method
+# welfare: interactions (LAM;MAS and MET;RP adjusted for all, LAM;SCK crude)
 res_welfare <- deconflate(m_welfare, n_draws = 0, joint = joint)
 res_welfare
 res_welfare$contributions                            # main and interaction parts
-
-# Exact feasibility check instead of the triple screen (needs lpSolve)
-if (requireNamespace("lpSolve", quietly = TRUE)) {
-  deconflate(m_yield, n_draws = 0, feasibility = "lp")$diagnostics$feasibility
-}
+res_welfare$conflation$A                             # what each row contains of each term
 
 # ---- 4. Event impacts (culling) ---------------------------------------------
 section("4. Event impacts")
 
 # culling.csv mixes hazard ratios (LAM, MAS stratified by LAM and SCK), a risk
-# ratio (MET), an odds ratio (SCK) and a risk difference (RP stratified by
-# all others). All are mapped onto the snapshot hazard model; the overall
+# ratio (MET), an odds ratio (SCK), a risk difference (RP stratified by all
+# others) and a crude hazard ratio for cows with both LAM and MAS (an
+# interaction). All are mapped onto the snapshot hazard model; the overall
 # risk (here 25% of animals culled in the lactation) is required, and the
 # risk-based estimates must refer to the same period.
 res_cull <- deconflate(m_cull, event_model = TRUE, overall_risk = 0.25, n_draws = 0, joint = joint)
 res_cull
-res_cull$adjusted                  # adjusted hazard ratios: each disease's own effect
+res_cull$adjusted                  # adjusted hazard ratios: each term's own effect
 res_cull$attributable$summary      # overall, disease-free and attributable risk
 res_cull$attributable$by_disease   # the attributable risk split by disease (Shapley)
 # event_model must match the table
 try_show(deconflate(m_cull, n_draws = 0))
 try_show(deconflate(m_yield, event_model = TRUE, overall_risk = 0.25))
 # compare_methods(): the first-order and published (2024) approaches need
-# hazard (or rate) ratios, so with this table only the snapshot model runs
+# one crude hazard (or rate) ratio per disease, so with this table only the
+# model runs
 compare_methods(m_cull, event_model = TRUE, overall_risk = 0.25)$failed
-hr_only <- cm_model(m_cull, cm_impacts(m_cull$diseases$id, c(1.74, 1.6, 1.3, 1.4, 1.5),
-                                       measure = "HR", estimand = "snapshot_crude",
-                                       label = "culling"))
+hr_only <- cm_model(m_pairs, cm_impacts(m_pairs$diseases$disease, c(1.74, 1.6, 1.3, 1.4, 1.5),
+                                        measure = "HR", label = "culling"))
 compare_methods(hr_only, event_model = TRUE, overall_risk = 0.25)
 
 # ---- 5. Uncertainty -----------------------------------------------------------
@@ -174,9 +196,8 @@ section("5. Uncertainty")
 
 # Every distribution in the tables is used: beta, pert, uniform and pert_mean
 # probabilities; lognormal_ci, normal, lognormal, pert, beta and uniform
-# association measures; a lognormal_ci three-way ratio; normal, pert,
-# pert_mean, fixed, lognormal and uniform impacts; normal and uniform
-# interactions; lognormal_ci, pert and normal event impacts. Values without a
+# association rows; normal, pert, pert_mean, fixed, lognormal and uniform
+# impact rows; lognormal_ci, pert and normal event impacts. Values without a
 # dist are fixed. deconflate() draws them (n_draws, 1000 by default) and
 # reports 95% intervals next to the central estimates.
 unc_yield <- deconflate(m_yield, n_draws = 200, seed = 1)
@@ -186,17 +207,20 @@ unc_yield$totals
 head(unc_yield$draws$summary)      # mean, sd, Monte Carlo error and stability per quantity
 unc_yield$draws$rejections         # draws that could not be used, and why
 # Latin hypercube sampling: Monte Carlo errors from replicate blocks
-lhs <- deconflate(m_yield, n_draws = 200, seed = 2, sampling = "lhs", lhs_replicates = 10)
+lhs <- deconflate(m_pairs, n_draws = 200, seed = 2, sampling = "lhs", lhs_replicates = 10)
 lhs$draws$summary[lhs$draws$summary$quantity == "total", c("quantity", "mean", "mcse")]
-# Interactions and the three-way ratio are drawn too (global method)
+# Interaction rows are drawn too
 unc_welfare <- deconflate(m_welfare, n_draws = 100, seed = 3)
 unc_welfare$totals
+# Several impact rows: each draw is fitted by weighted least squares
+unc_ci <- deconflate(m_ci, n_draws = 100, seed = 6)
+unc_ci$adjusted
 # Event impacts, with an uncertain overall risk
 unc_cull <- deconflate(m_cull, event_model = TRUE, overall_risk = dist_beta(250, 750),
                        n_draws = 100, seed = 4)
 unc_cull$attributable$summary
 # Methods compared on the same draws
-compare_methods(m_yield, methods = c("published", "simultaneous"), n_draws = 200, seed = 5)
+compare_methods(m_pairs, n_draws = 200, seed = 5)
 # Without distributions, no draws are run
 deconflate(example_supplement())$notes
 
@@ -244,7 +268,7 @@ screen_associations(m_none, or_values = c(0.5, 3))
 
 # Scenarios built with the set_* functions, adjusted like any model
 strong <- set_association(m_yield, "LAM", "RP", 3)                 # an unrelated pair made associated
-no_three <- set_three_way(m_welfare, "LAM", "MAS", "SCK", 1)       # no three-way association
+no_three <- set_three_way(m_welfare, "LAM", "MAS", "SCK", 1)       # replaces the OR_ratio row
 syn <- set_interaction(m_welfare, "MAS", "SCK", 1.5)               # an extra interaction
 sapply(list(base = m_yield, strong_LAM_RP = strong),
        function(m) deconflate(m, n_draws = 0)$totals$adjusted_total)
@@ -269,15 +293,18 @@ th_total$thresholds
 th_change <- cm_threshold(m_welfare, "inter:LAM:MAS", c(-5, 20), conclusion = "change",
                           target = -0.1)
 th_change$thresholds
-# a three-way ratio, searched on a log scale (global method)
+# the OR_ratio row, searched on a log scale
 th_three <- cm_threshold(m_welfare, "three:LAM:MAS:SCK", c(0.2, 5), conclusion = "rank")
 th_three$summary
+# any row by its number: the second LAM-MAS study
+th_row <- cm_threshold(m_yield, "associations:2", c(0.5, 10), conclusion = "change", target = -0.05)
+th_row$thresholds
 # a disease probability: where would SCK's yield contribution overtake MET's?
 th_prob <- cm_threshold(m_yield, "prob:SCK", c(0.1, 0.6), conclusion = "rank",
                         diseases = c("MET", "SCK"))
 th_prob$thresholds
 # Ranges that cannot be evaluated are listed in `regions`; a jump through a
-# pole or a nearly singular system is reported as a discontinuity, never as a
+# pole or a singular system is reported as a discontinuity, never as a
 # threshold
 th_prob$regions
 # event impacts: at what overall risk does the attributable risk reach 0.08?
@@ -289,22 +316,31 @@ th_risk$thresholds
 section("9. Simulation and Shapley values")
 
 # Simulate what studies would report from known true impacts and
-# interactions, and check that the global method recovers them.
+# interactions, and check that the model recovers them. By default: a crude
+# row for each disease and each combination.
 truth <- c(LAM = 8, MAS = 4, MET = 3, SCK = 1, RP = 2)
-raw <- simulate_raw_impacts(m_yield3, truth,
-                            interactions = cm_interactions("LAM", "MAS", 2), joint = joint,
+raw <- simulate_raw_impacts(m_yield, truth, interactions = c("LAM;MAS" = 2), joint = joint,
                             units = "score points")
 raw
-rec <- deconflate(cm_model(m_yield3, raw, cm_interactions("LAM", "MAS", 2)), n_draws = 0,
-                  joint = joint)
-cbind(true = truth, recovered = rec$adjusted$adjusted)
+rec <- deconflate(cm_model(m_yield, raw), n_draws = 0, joint = joint)
+cbind(true = c(truth, "LAM;MAS" = 2), recovered = rec$adjusted$adjusted)
+# Rows of any kind: MAS adjusted for SCK, RP among no others, the LAM;MAS
+# combination (crude: both against neither), and LAM within MAS. The
+# interaction is a term of the model because a row names the combination;
+# the seven rows over-determine the six terms, and agree exactly.
+rows <- data.frame(disease = c("LAM", "MAS", "MET", "SCK", "RP", "LAM;MAS", "LAM"),
+                   among = c(NA, NA, NA, NA, "no others", NA, "MAS"),
+                   adjusted_for = c(NA, "SCK", NA, NA, NA, NA, NA))
+raw_rows <- simulate_raw_impacts(m_yield, truth, interactions = c("LAM;MAS" = 2), rows = rows,
+                                 joint = joint)
+raw_rows
+deconflate(cm_model(m_yield, raw_rows), n_draws = 0, joint = joint)$adjusted
 
 # Coefficients of an additive regression adjusted for all other diseases
-raw_adj <- simulate_raw_impacts(m_yield3, truth, estimand = "adjusted_linear",
-                                adjusted_for = "all", joint = joint)
+raw_adj <- simulate_raw_impacts(m_yield, truth, adjusted_for = "all", joint = joint)
 raw_adj$value  # without interactions these equal the true impacts
 # A finite study of 5000 animals adds sampling error
-simulate_raw_impacts(m_yield3, truth, n = 5000, joint = joint)$value
+simulate_raw_impacts(m_yield, truth, n = 5000, joint = joint)$value
 
 # Shapley values cell by cell: additive with a pairwise term, and
 # multiplicative (proportional losses that cannot exceed 100%)
@@ -313,40 +349,41 @@ shapley_by_cell(joint, loss_additive(truth, terms = list(list(diseases = c("LAM"
 shapley_by_cell(joint, loss_multiplicative(c(LAM = 0.05, MAS = 0.03, MET = 0.06,
                                              SCK = 0.02, RP = 0.04)))
 
-# ---- 10. Variants: unknown pairs and adjusted associations ------------------
+# ---- 10. Variants: unknown pairs, adjusted associations, old layouts --------
 section("10. Variants")
 
-assoc <- utils::read.csv(f("associations.csv"), stringsAsFactors = FALSE)
-# An unknown association: leave the MAS-RP row out. "auto" uses the global
-# method, which fills the pair in; the result lists the odds ratio it got.
-r <- which(assoc$disease1 == "MAS" & assoc$disease2 == "RP")
-m_u <- read_five("impacts_yield.csv", three_way = FALSE, associations = assoc[-r, ])
+# An unknown association: leave the MAS-RP row out. The fit fills the pair
+# in; the result lists the odds ratio it got.
+r <- which(assoc$disease == "MAS" & assoc$associated_with == "RP")
+m_u <- read_five("impacts_yield.csv", associations = assoc[-r, ])
 res_u <- deconflate(m_u, n_draws = 0)
-res_u$notes
 res_u$unknown_pairs
-# compare_methods() does not switch: the pairwise methods cannot run
+# The published approximation needs every pair
 compare_methods(m_u)$failed
-# With an unknown pair, a three-way term can change additive results
-screen_three_way(m_u, ratios = c(0.5, 2))
-# An odds ratio of 1 states that two diseases are unrelated (LAM-RP in
-# associations.csv); the measures "independent", "unknown" and "table" are
-# no longer accepted, and the check says what to write instead
-old <- rbind(assoc[, c("disease1", "disease2", "value", "measure")],
-             data.frame(disease1 = "MAS", disease2 = "RP", value = NA, measure = "unknown"))
-old <- old[-r, ]
-old$measure[old$disease1 == "LAM" & old$disease2 == "RP"] <- "independent"
-cm_check_inputs(diseases = f("diseases.csv"), associations = old, impacts = f("impacts_yield.csv"))
+# With an unknown pair, an OR_ratio row can change additive results
+screen_three_way(m_u, ratios = c(0.5, 2), triples = list(c("MAS", "RP", "MET")))
 
-# A covariate-adjusted risk ratio (MET-SCK): rejected unless used as a
-# marginal approximation
+# An odds ratio adjusted for other diseases of the model (MET-SCK given LAM,
+# from a logistic regression): matched as the regression coefficient. Ids
+# that are not diseases (parity) are noted and ignored.
 a_adj <- assoc
-r2 <- which(a_adj$disease1 == "MET" & a_adj$disease2 == "SCK")
-a_adj$adjusted[r2] <- TRUE
-a_adj$adjusted_for[r2] <- "LAM"
-cm_check_inputs(diseases = f("diseases.csv"), associations = a_adj, impacts = f("impacts_yield.csv"))
-m_adj <- cm_read_inputs(diseases = f("diseases.csv"), associations = a_adj,
-                        impacts = f("impacts_yield.csv"), adjusted_associations = "use_as_marginal")
-deconflate(m_adj, n_draws = 0)$adjusted
+r2 <- which(a_adj$disease == "MET" & a_adj$associated_with == "SCK")
+a_adj$measure[r2] <- "OR"
+a_adj$value[r2] <- 1.6
+a_adj[r2, c("dist", "p1", "p2", "p3")] <- NA
+a_adj$adjusted_for[r2] <- "LAM; parity"
+m_adj <- read_five("impacts_yield.csv", associations = a_adj)
+res_adj <- deconflate(m_adj, n_draws = 0)
+res_adj$notes
+res_adj$adjusted
+
+# Files of earlier versions: the check says what to write instead
+old <- data.frame(disease1 = c("LAM", "MAS"), disease2 = c("MAS", "RP"), value = c(1.8, NA),
+                  measure = c("OR", "unknown"))
+cm_check_inputs(diseases = f("diseases.csv"), associations = old, impacts = f("impacts_yield.csv"))
+old2 <- assoc[1:3, c("disease", "associated_with", "measure", "value")]
+old2$measure[2] <- "cond_prob"
+cm_check_inputs(diseases = f("diseases.csv"), associations = old2, impacts = f("impacts_yield.csv"))
 
 # ---- 11. Plots ---------------------------------------------------------------
 section("11. Plots")

@@ -14,33 +14,35 @@ estimates so that they can be aggregated.
 \section{Workflow}{
 
 \enumerate{
-\item Read the inputs with \code{\link[=cm_read_inputs]{cm_read_inputs()}}: the diseases, their
-associations, one impact table and, optionally, interactions and
-three-way terms (CSV files with any names, or data frames; see
-\code{\link[=cm_template]{cm_template()}}). Values can have distributions in their own rows. The
-same inputs can be built in R with \code{\link[=cm_diseases]{cm_diseases()}},
-\code{\link[=cm_associations]{cm_associations()}}, \code{\link[=cm_three_way]{cm_three_way()}}, \code{\link[=cm_impacts]{cm_impacts()}},
-\code{\link[=cm_interactions]{cm_interactions()}} and \code{\link[=cm_model]{cm_model()}}. For several outcomes, use one
-impact table each and adjust each in turn.
-\item Adjust the impacts with \code{\link[=deconflate]{deconflate()}}. Additive impacts (in any units)
-are adjusted with the exact simultaneous solution when every pair has
-an association and there are no interactions or three-way terms, and
-with the global (maximum-entropy) model otherwise; pairs without an
-association are unknown and filled in by the global model. Event
-impacts (hazard ratios, rate ratios, risk ratios, odds ratios or risk
-differences of e.g. culling) use the snapshot hazard model
-(\code{event_model = TRUE}, with the overall risk), which also gives the
-risk attributable to disease. When inputs have distributions,
+\item Read the inputs with \code{\link[=cm_read_inputs]{cm_read_inputs()}}: the diseases, the association
+rows and one impact table (CSV files with any names, or data frames;
+see \code{\link[=cm_template]{cm_template()}}). An association row can be about a pair, a
+combination or a subgroup, crude or adjusted; an impact row can be
+about a disease or a combination (an interaction), within a subgroup,
+crude or adjusted; several rows can describe the same thing. Values can
+have distributions in their own rows. The same inputs can be built in R
+with \code{\link[=cm_diseases]{cm_diseases()}}, \code{\link[=cm_associations]{cm_associations()}}, \code{\link[=cm_impacts]{cm_impacts()}} and
+\code{\link[=cm_model]{cm_model()}}. For several outcomes, use one impact table each and
+adjust each in turn.
+\item Adjust the impacts with \code{\link[=deconflate]{deconflate()}}. The package has one model: the
+maximum-entropy distribution of disease combinations that matches every
+association row (pairs that no row mentions are unknown and filled in),
+and the impacts and interactions that reproduce every impact row
+(exactly, or by weighted least squares when there are more rows than
+unknowns). When the pairwise tables give the same answer, they are used
+directly. Event impacts (hazard ratios, rate ratios, risk ratios, odds
+ratios or risk differences of e.g. culling) use the snapshot hazard
+model (\code{event_model = TRUE}, with the overall risk), which also gives
+the risk attributable to disease. When inputs have distributions,
 \code{deconflate()} also reports intervals (\code{n_draws}).
 \item Inspect each disease's contribution (\code{\link[=attribute_burden]{attribute_burden()}},
-\code{\link[=contribution_table]{contribution_table()}}, \code{\link[=plot_burden]{plot_burden()}}), in the units of the impacts.
+\code{\link[=contribution_table]{contribution_table()}}, \code{\link[=plot_burden]{plot_burden()}}), in the units of the impacts,
+and how well the rows fit together (\verb{$estimates}, \verb{$heterogeneity}).
 Converting the results into other quantities (e.g. a productivity gap
 or a monetary value) is left to the user. \code{\link[=compare_methods]{compare_methods()}} sets the
-methods side by side, including the proportional approximation of
-Rasmussen et al. (2022, eq. 16), which is kept for comparison and
-reproduction only.
-\item Check joint feasibility with \code{\link[=check_feasibility]{check_feasibility()}} (a screen runs by
-default).
+model beside the proportional approximation of Rasmussen et al. (2022,
+eq. 16), which is kept for comparison and reproduction only.
+\item Check joint feasibility with \code{\link[=check_feasibility]{check_feasibility()}}.
 \item Explore the inputs with \code{\link[=sensitivity_oat]{sensitivity_oat()}}, \code{\link[=screen_associations]{screen_associations()}}
 (also without any association estimates), \code{\link[=screen_interactions]{screen_interactions()}} and
 \code{\link[=screen_three_way]{screen_three_way()}}, and find where a conclusion (a ranking, a sign

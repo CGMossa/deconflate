@@ -82,7 +82,7 @@ plot_burden <- function(result, ...) {
     main <- "Risk attributable to disease, by disease"
     ylab <- "Share of the attributable risk (%)"
   } else if (inherits(result, "cm_result")) {
-    ids <- result$adjusted$disease
+    ids <- result$contributions$disease
     share <- 100 * result$contributions$share
     main <- "Burden by disease"
     ylab <- "Share of the aggregate (%)"

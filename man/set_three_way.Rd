@@ -2,7 +2,7 @@
 % Please edit documentation in R/sensitivity.R
 \name{set_three_way}
 \alias{set_three_way}
-\title{Set or replace one three-way association term}
+\title{Set or replace one three-way association}
 \usage{
 set_three_way(model, disease1, disease2, disease3, ratio)
 }
@@ -11,12 +11,14 @@ set_three_way(model, disease1, disease2, disease3, ratio)
 
 \item{disease1, disease2, disease3}{Disease ids.}
 
-\item{ratio}{Ratio of conditional odds ratios (see \code{\link[=cm_three_way]{cm_three_way()}}).}
+\item{ratio}{Positive ratio of the two odds ratios.}
 }
 \value{
-The modified object. A distribution of the triple's ratio in the
-model's \code{distributions} is dropped (the scenario value is fixed).
+The modified object. Distributions of replaced rows are dropped.
 }
 \description{
-Set or replace one three-way association term
+Sets how much \code{disease3} changes the association of \code{disease1} and
+\code{disease2}: an \code{OR_ratio} row (the odds ratio of disease1 and disease2
+among animals with disease3, divided by that among animals without it;
+see \code{\link[=cm_associations]{cm_associations()}}). Replaces such a row if present.
 }

@@ -7,11 +7,13 @@
 association_to_joint(measure, value, p1, p2)
 }
 \arguments{
-\item{measure}{One of the measures in \code{\link[=cm_associations]{cm_associations()}}.}
+\item{measure}{\code{"OR"}, \code{"RR"}, \code{"RD"}, \code{"phi"} or \code{"prevalence"} (see
+\code{\link[=cm_associations]{cm_associations()}}; the directional measures treat disease 1 as the
+outcome and disease 2 as the comparison).}
 
 \item{value}{Association value.}
 
-\item{p1, p2}{Marginal probabilities of \code{disease1} and \code{disease2}.}
+\item{p1, p2}{Marginal probabilities of disease 1 and disease 2.}
 }
 \value{
 \verb{P(d1 and d2)}. Errors with class \code{deconflate_infeasible} if the

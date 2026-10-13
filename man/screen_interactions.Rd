@@ -21,8 +21,8 @@ diseases).}
 A \code{cm_screen} data frame as in \code{\link[=screen_associations]{screen_associations()}}.
 }
 \description{
-Adds a pairwise interaction of each size in \code{values} to each disease pair,
-one at a time, re-runs the global adjustment and reports the change in
-the aggregate and rankings. The joint distribution is fitted once and
-reused. Interactions apply to additive impacts only.
+Sets the interaction of each disease pair to each size in \code{values}, one
+at a time (see \code{\link[=set_interaction]{set_interaction()}}), re-runs the adjustment and reports
+the change in the aggregate and rankings. The joint distribution is
+fitted once and reused. For additive impacts.
 }

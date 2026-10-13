@@ -12,7 +12,7 @@ unc_model <- function(d1 = dist_normal(2.5, 0.5), d3 = dist_normal(7.5, 1)) {
 # The supplement population with event impacts (hazard ratios), d1 uncertain.
 unc_event_model <- function() {
   cm_model(supp_population(),
-           cm_impacts(ids3, c(1.5, 2.0, 1.3), measure = "HR", estimand = "snapshot_crude", label = "culling"),
+           cm_impacts(ids3, c(1.5, 2.0, 1.3), measure = "HR", label = "culling"),
            distributions = list("impact:d1" = dist_lognormal_ci(1.5, 1.2, 1.9)))
 }
 
@@ -24,27 +24,28 @@ stability_levels <- c("ok", "imprecise", "insufficient_info", "heavy_tail", "pos
 # ---- Distributions in the model ------------------------------------------------
 
 test_that("distributions are keyed by input and checked against the model", {
-  m <- cm_model(supp_population(), cm_impacts(ids3, c(2.5, 5, 7.5)), cm_interactions("d1", "d2", 0.5),
+  m <- cm_model(supp_population(), cm_impacts(c(ids3, "d1;d2"), c(2.5, 5, 7.5, 0.5),
+                                              adjusted_for = c(NA, NA, NA, "all")),
                 distributions = list("prob:d1" = dist_fixed(0.12), "assoc:d2:d1" = dist_fixed(2.5),
                                      "assoc:d3:d2" = dist_fixed(1.5), "impact:d3" = dist_fixed(8),
                                      "inter:d2:d1" = dist_fixed(1)))
-  # Keys in canonical form: pairs as listed in their tables.
+  # Keys in canonical form: the table and row.
   expect_equal(names(m$distributions),
-               c("prob:d1", "assoc:d1:d2", "assoc:d2:d3", "impact:d3", "inter:d1:d2"))
+               c("prob:d1", "associations:1", "associations:3", "impacts:3", "impacts:4"))
   expect_true(all(vapply(m$distributions, inherits, logical(1), "cm_dist")))
   expect_output(print(m), "Uncertain inputs \\(with a distribution\\): 5")
-  # set_inputs() puts drawn values into a copy of the model.
-  d <- set_inputs(m, c("prob:d1" = 0.12, "assoc:d1:d2" = 2.5, "assoc:d2:d3" = 1.5,
-                       "impact:d3" = 8, "inter:d1:d2" = 1))
+  # set_inputs() puts drawn values into a copy of the model, by canonical
+  # key or alias.
+  d <- set_inputs(m, c("prob:d1" = 0.12, "associations:1" = 2.5, "assoc:d2:d3" = 1.5,
+                       "impacts:3" = 8, "inter:d1:d2" = 1))
   expect_s3_class(d, "cm_model")
   expect_equal(d$diseases$value, c(0.12, 0.15, 0.20))
   expect_equal(d$diseases$prob, c(0.12, 0.15, 0.20))
   expect_equal(d$associations$value, c(2.5, 1, 1.5))
-  expect_equal(d$impacts$value, c(2.5, 5, 8))
-  expect_equal(d$interactions$value, 1)
-  expect_equal(m$impacts$value, c(2.5, 5, 7.5))
+  expect_equal(d$impacts$value, c(2.5, 5, 8, 1))
+  expect_equal(m$impacts$value, c(2.5, 5, 7.5, 0.5))
   # Incidence rates are drawn on their own scale and converted.
-  m_ir <- cm_model(cm_diseases(ids3, c(0.10, 0.15, 0.20), type = "incidence_rate"),
+  m_ir <- cm_model(cm_diseases(ids3, c(0.10, 0.15, 0.20), measure = "incidence_rate"),
                    cm_impacts(ids3, c(2.5, 5, 7.5)),
                    associations = cm_associations(c("d1", "d1", "d2"), c("d2", "d3", "d3"), c(2, 1, 3)),
                    distributions = list("prob:d2" = dist_uniform(0.4, 0.6)))
@@ -53,20 +54,17 @@ test_that("distributions are keyed by input and checked against the model", {
   expect_equal(d_ir$diseases$prob[2], 1 - exp(-0.5))
 
   mk <- function(dists, model = supp_model(c(2.5, 5, 7.5))) {
-    cm_model(as_population(model), model$impacts, model$interactions, distributions = dists)
+    cm_model(as_population(model), model$impacts, distributions = dists)
   }
   expect_error(mk(list("impact:d1" = 3)), "named list of distributions")
   expect_error(mk(list(dist_fixed(3))), "named list of distributions")
   expect_error(mk(list("prob:zz" = dist_fixed(0.1))), "unknown disease")
-  expect_error(mk(list("impact:zz" = dist_fixed(1))), "unknown disease")
+  expect_error(mk(list("impact:zz" = dist_fixed(1))), "no impact row matches")
   expect_error(mk(list("assoc:d1-d2" = dist_fixed(2))), "assoc:<d1>:<d2>")
   expect_error(mk(list("assoc:d1:d2:d3" = dist_fixed(2))), "assoc:<d1>:<d2>")
   expect_error(mk(list("assoc:d1:d2" = dist_fixed(2), "assoc:d2:d1" = dist_fixed(3))), "more than once")
   expect_error(mk(list("impact:d1" = dist_fixed(1), "impact:d1" = dist_fixed(2))), "more than once")
-  expect_error(mk(list("inter:d1:d2" = dist_fixed(1))), "no interaction")
-  expect_error(mk(list("inter:d1:d3" = dist_fixed(1)),
-                  supp_model(c(2.5, 5, 7.5), interactions = cm_interactions("d1", "d2", 0.5))),
-               "no interaction row")
+  expect_error(mk(list("inter:d1:d2" = dist_fixed(1))), "no impact row matches")
   expect_error(mk(list("assoc:d1:d3" = dist_fixed(1)),
                   cm_model(supp_unknown_population(), cm_impacts(ids3, c(2.5, 5, 7.5)))),
                "no association row")
@@ -86,34 +84,34 @@ test_that("impossible drawn values raise deconflate_infeasible", {
   expect_error(set_inputs(m, c("impact:d1" = Inf)), "not finite", class = "deconflate_infeasible")
   e <- supp_hr_model(c(1.5, 2, 0.05), measure = c("HR", "HR", "RD"))
   expect_error(set_inputs(e, c("impact:d1" = -1)), "not a valid HR", class = "deconflate_infeasible")
-  expect_error(set_inputs(e, c("impact:d3" = 1.5)), "not a valid risk difference",
+  expect_error(set_inputs(e, c("impacts:3" = 1.5)), "not a valid risk difference",
                class = "deconflate_infeasible")
   expect_equal(set_inputs(e, c("impact:d3" = -0.05))$impacts$value[3], -0.05)
-  expect_error(set_inputs(m, c("foo:d1" = 1)), "Unknown input key")
+  expect_error(set_inputs(m, c("foo:d1" = 1)), "unknown input type")
+  p <- cm_model(supp_population(cm_associations("d1", "d2", 0.3, measure = "prevalence", among = "d3")),
+                m$impacts)
+  expect_error(set_inputs(p, c("associations:4" = 1)), "not a valid prevalence", class = "deconflate_infeasible")
 })
 
-test_that("three-way ratios can have distributions, in any order of the diseases", {
-  pop <- supp_population(three_way = cm_three_way("d2", "d1", "d3", 2))
-  m <- cm_model(pop, cm_impacts(ids3, c(2.5, 5, 7.5)), cm_interactions("d1", "d2", 0.5),
+test_that("three-way ratios (OR_ratio rows) can have distributions, in any order of the diseases", {
+  pop <- supp_population(cm_associations("d2", "d1", 2, measure = "OR_ratio", among = "d3"))
+  m <- cm_model(pop, cm_impacts(c(ids3, "d1;d2"), c(2.5, 5, 7.5, 0.5), adjusted_for = c(NA, NA, NA, "all")),
                 distributions = list("three:d3:d1:d2" = dist_lognormal_ci(2, 1.2, 3.5)))
-  expect_equal(names(m$distributions), "three:d2:d1:d3")
-  expect_equal(set_inputs(m, c("three:d2:d1:d3" = 1.7))$three_way$ratio, 1.7)
-  expect_error(set_inputs(m, c("three:d2:d1:d3" = 0)), "positive", class = "deconflate_infeasible")
-  expect_error(set_inputs(m, c("three:d2:d1:d3" = -1)), class = "deconflate_infeasible")
-  mk <- function(d) cm_model(pop, m$impacts, m$interactions, distributions = d)
+  expect_equal(names(m$distributions), "associations:4")
+  expect_equal(set_inputs(m, c("associations:4" = 1.7))$associations$value[4], 1.7)
+  expect_error(set_inputs(m, c("associations:4" = 0)), "not a valid OR_ratio", class = "deconflate_infeasible")
+  mk <- function(d) cm_model(pop, m$impacts, distributions = d)
   expect_error(mk(list("three:d1:d2" = dist_fixed(2))), "three:<d1>:<d2>:<d3>")
-  expect_error(mk(list("three:d1:d2:d4" = dist_fixed(2))), "no three-way row")
+  expect_error(mk(list("three:d1:d2:d4" = dist_fixed(2))), "no association row matches")
   expect_error(mk(list("three:d1:d2:d3" = dist_fixed(2), "three:d3:d2:d1" = dist_fixed(3))),
                "more than once")
-  expect_error(cm_model(supp_population(), m$impacts, distributions = list("three:d1:d2:d3" = dist_fixed(2))),
-               "no three-way terms")
   res <- deconflate(m, n_draws = 20, seed = 1)
-  expect_equal(res$method, "global")
+  expect_equal(res$method, "full model")
   expect_equal(res$draws$n_rejected, 0)
-  expect_gt(length(unique(res$draws$params[, "three:d2:d1:d3"])), 1)
-  # The ratio changes the global result when interactions are present.
-  lo <- deconflate(set_inputs(m, c("three:d2:d1:d3" = 0.5)), n_draws = 0)$totals$adjusted_total
-  hi <- deconflate(set_inputs(m, c("three:d2:d1:d3" = 4)), n_draws = 0)$totals$adjusted_total
+  expect_gt(length(unique(res$draws$params[, "associations:4"])), 1)
+  # The ratio changes the result when interactions are present.
+  lo <- deconflate(set_inputs(m, c("associations:4" = 0.5)), n_draws = 0)$totals$adjusted_total
+  hi <- deconflate(set_inputs(m, c("associations:4" = 4)), n_draws = 0)$totals$adjusted_total
   expect_false(isTRUE(all.equal(lo, hi)))
   expect_gt(stats::sd(res$draws$values[, "total"]), 0)
 })
@@ -123,7 +121,7 @@ test_that("three-way ratios can have distributions, in any order of the diseases
 test_that("deconflate() draws the uncertain inputs and summarises the results", {
   m <- unc_model()
   res <- deconflate(m, n_draws = 100, seed = 3)
-  expect_equal(res$method, "simultaneous")
+  expect_equal(res$method, "pairwise shortcut")
   dr <- res$draws
   expect_true(all(c("summary", "values", "params", "draw", "n_draws", "n_rejected", "rejections",
                     "seed", "sampling", "specs") %in% names(dr)))
@@ -135,21 +133,21 @@ test_that("deconflate() draws the uncertain inputs and summarises the results", 
   expect_equal(dr$draw, 1:100)
   expect_named(dr$rejections, c("draw", "type", "reason"))
   expect_equal(nrow(dr$rejections), 0)
-  expect_equal(names(dr$specs), c("impact:d1", "impact:d3"))
+  expect_equal(names(dr$specs), c("impacts:1", "impacts:3"))
   qn <- c(paste0("adjusted:", ids3), paste0("contribution:", ids3), "total", "raw_sum")
   expect_equal(colnames(dr$values), qn)
   expect_equal(dim(dr$values), c(100L, 8L))
-  expect_equal(colnames(dr$params), c("impact:d1", "impact:d3"))
+  expect_equal(colnames(dr$params), c("impacts:1", "impacts:3"))
 
   # Draws are quantiles of the distributions at seeded uniforms.
   set.seed(3)
   u <- matrix(stats::runif(200), 100, 2)
-  expect_equal(unname(dr$params[, "impact:d1"]), stats::qnorm(u[, 1], 2.5, 0.5))
-  expect_equal(unname(dr$params[, "impact:d3"]), stats::qnorm(u[, 2], 7.5, 1))
+  expect_equal(unname(dr$params[, "impacts:1"]), stats::qnorm(u[, 1], 2.5, 0.5))
+  expect_equal(unname(dr$params[, "impacts:3"]), stats::qnorm(u[, 2], 7.5, 1))
 
   # Each draw is the exact adjustment of its own inputs (linear here).
   A <- res$conflation$A
-  raw <- cbind(dr$params[, "impact:d1"], 5, dr$params[, "impact:d3"])
+  raw <- cbind(dr$params[, "impacts:1"], 5, dr$params[, "impacts:3"])
   expect_equal(unname(dr$values[, paste0("adjusted:", ids3)]), unname(t(solve(A, t(raw)))), tolerance = 1e-10)
   expect_equal(unname(rowSums(dr$values[, paste0("contribution:", ids3)])), unname(dr$values[, "total"]),
                tolerance = 1e-12)
@@ -221,8 +219,8 @@ test_that("without distributions there are no draws, and a note says so", {
   res <- deconflate(example_supplement())
   expect_null(res$draws)
   expect_null(res$adjusted$lower)
-  expect_match(res$notes, "No input has a distribution, so no draws were run")
-  expect_match(summary(res)$notes, "No input has a distribution")
+  expect_match(res$notes, "No input has a distribution, so no draws were run", all = FALSE)
+  expect_match(summary(res)$notes, "No input has a distribution", all = FALSE)
   expect_output(print(res), "No input has a distribution")
   expect_length(deconflate(example_supplement(), n_draws = 0)$notes, 0)
 })
@@ -240,8 +238,8 @@ test_that("Latin hypercube sampling uses replicate blocks and block-mean standar
   # Each block is stratified: one draw in each of 20 equal-probability strata.
   for (b in 1:5) {
     sel <- dr$block == b
-    expect_equal(sort(floor((dr$params[sel, "impact:d1"] - 2) * 20)), 0:19)
-    expect_equal(sort(floor(stats::pnorm(dr$params[sel, "impact:d3"], 7.5, 1) * 20)), 0:19)
+    expect_equal(sort(floor((dr$params[sel, "impacts:1"] - 2) * 20)), 0:19)
+    expect_equal(sort(floor(stats::pnorm(dr$params[sel, "impacts:3"], 7.5, 1) * 20)), 0:19)
   }
   for (q in c("adjusted:d1", "adjusted:d3", "total")) {
     x <- dr$values[, q]
@@ -275,7 +273,7 @@ test_that("rejected draws are counted, tabulated and not replaced", {
   expect_length(intersect(dr$rejections$draw, dr$draw), 0)
   expect_setequal(c(dr$rejections$draw, dr$draw), 1:300)
   expect_true(all(dr$params[, "prob:d1"] > 0))
-  expect_true(all(dr$params[, "assoc:d1:d2"] > 0))
+  expect_true(all(dr$params[, "associations:1"] > 0))
   expect_output(print(res), sprintf("\\(%d rejected;", dr$n_rejected))
 
   # A high rejection share gets a note (print and summary).
@@ -311,7 +309,7 @@ test_that("rejections are typed by the class of the failure", {
     c(a = v)
   }
   dr <- run_draws(m, m$distributions, 60, 1, "random", 10L, ev)
-  p <- deconflate(m, n_draws = 60, seed = 1)$draws$params[, "impact:d1"]
+  p <- deconflate(m, n_draws = 60, seed = 1)$draws$params[, "impacts:1"]
   expect_equal(dr$n_rejected, sum(p > 2.5 | p < 2))
   expect_setequal(unique(dr$rejections$type), c("unsupported", "nonfinite"))
   expect_equal(dr$rejections$draw[dr$rejections$type == "unsupported"], which(p > 2.5))
@@ -352,13 +350,12 @@ test_that("stability statuses follow the documented rules", {
   expect_null(summarise_draws(list(values = NULL)))
 })
 
-test_that("each draw matches deconflate() on its own inputs (global method, unknown pair)", {
+test_that("each draw matches deconflate() on its own inputs (full model, unknown pair)", {
   m <- cm_model(supp_unknown_population(), cm_impacts(ids3, c(2.5, 5, 7.5)),
                 distributions = list("assoc:d1:d2" = dist_lognormal_ci(2, 1.5, 2.7),
                                      "impact:d2" = dist_normal(5, 1)))
   res <- deconflate(m, n_draws = 20, seed = 1)
-  expect_equal(res$method, "global")
-  expect_true(any(grepl("1 pair without an association \\(unknown\\)", res$notes)))
+  expect_equal(res$method, "full model")
   expect_equal(res$draws$n_rejected, 0)
   expect_equal(nrow(res$unknown_pairs), 1)
   expect_gt(stats::sd(res$draws$values[, "adjusted:d1"]), 0)
@@ -381,7 +378,7 @@ test_that("event-model draws, with the overall risk as a distribution", {
   expect_equal(res$adjusted$adjusted, c(1.3831529713, 1.8909315489, 1.1439870467), tolerance = 1e-7)
   expect_equal(res$attributable$summary$attributable, 0.0366489851, tolerance = 1e-8)
   dr <- res$draws
-  expect_equal(colnames(dr$params), c("impact:d1", "risk"))
+  expect_equal(colnames(dr$params), c("impacts:1", "risk"))
   expect_true(all(dr$params[, "risk"] > 0 & dr$params[, "risk"] < 1))
   expect_gt(length(unique(dr$params[, "risk"])), 1)
   qn <- c(paste0("adjusted:", ids3), "total", "fraction", paste0("contribution:", ids3))
@@ -419,7 +416,7 @@ test_that("event-model draws, with the overall risk as a distribution", {
   # A fixed overall risk and no distributions: no draws.
   r0 <- deconflate(supp_hr_model(), event_model = TRUE, overall_risk = 0.25)
   expect_null(r0$draws)
-  expect_match(r0$notes, "No input has a distribution")
+  expect_match(r0$notes, "No input has a distribution", all = FALSE)
 
   # The overall risk must be a proportion, or a distribution within (0, 1).
   expect_error(deconflate(m, event_model = TRUE, overall_risk = dist_normal(0.25, 0.05)),
@@ -434,14 +431,15 @@ test_that("event-model draws, with the overall risk as a distribution", {
 
 test_that("event-model draws of the five-disease culling table", {
   skip_on_cran()
-  cu <- read_five("culling.csv", three_way = TRUE)
+  cu <- read_five("culling.csv")
   res <- deconflate(cu, event_model = TRUE, overall_risk = dist_beta(250, 750), n_draws = 20, seed = 1)
   dr <- res$draws
   expect_equal(colnames(dr$params), c(names(cu$distributions), "risk"))
   expect_equal(dr$n_rejected + nrow(dr$params), 20)
   expect_gt(nrow(dr$params), 10)
-  expect_equal(res$adjusted$adjusted, c(1.58344491, 1.57873827, 1.08072624, 1.19114596, 1.50176712),
-               tolerance = 1e-6)
+  # Central values (reference_v041.py), at the mean overall risk 0.25.
+  expect_equal(res$adjusted$adjusted, c(1.060298968, 1.2342866774, 1.080381173, 1.1753668593, 1.509273874,
+                                        2.2779452712), tolerance = 1e-6)
   expect_true(all(res$adjusted$lower <= res$adjusted$upper))
   expect_false(is.null(res$attributable$summary$attributable_lower))
 })
@@ -450,21 +448,21 @@ test_that("event-model draws of the five-disease culling table", {
 
 test_that("compare_methods() applies every method to the same draws", {
   m <- unc_model()
-  cmp <- compare_methods(m, methods = c("published", "simultaneous"), n_draws = 100, seed = 3)
+  cmp <- compare_methods(m, n_draws = 100, seed = 3)
   dr <- cmp$draws
   expect_equal(dr$n_draws, 100)
   expect_equal(dr$n_rejected, 0)
   s <- dr$summary
   expect_named(s, c("method", "quantity", "mean", "sd", "mcse", "lower", "median", "upper", "stability"))
-  expect_equal(unique(s$method), c("published", "simultaneous"))
+  expect_equal(unique(s$method), c("published", "deconflate"))
   qn <- c(paste0("adjusted:", ids3), paste0("contribution:", ids3), "total", "raw_sum")
-  expect_equal(s$quantity[s$method == "simultaneous"], qn)
+  expect_equal(s$quantity[s$method == "deconflate"], qn)
   expect_equal(s$quantity[s$method == "published"], qn)
   expect_true(all(s$stability %in% stability_levels))
   # The same draws as deconflate() with the same seed.
   res <- deconflate(m, n_draws = 100, seed = 3)
   expect_identical(dr$params, res$draws$params)
-  ss <- s[s$method == "simultaneous", ]
+  ss <- s[s$method == "deconflate", ]
   expect_equal(ss$mean, res$draws$summary$mean, tolerance = 1e-12)
   expect_equal(ss$lower, res$draws$summary$lower, tolerance = 1e-12)
   expect_equal(ss$upper, res$draws$summary$upper, tolerance = 1e-12)
@@ -472,45 +470,45 @@ test_that("compare_methods() applies every method to the same draws", {
   expect_equal(s$mean[s$method == "published" & s$quantity == "raw_sum"],
                ss$mean[ss$quantity == "raw_sum"])
   # The point comparison is unchanged by the draws.
-  expect_equal(cmp$impacts, compare_methods(m, methods = c("published", "simultaneous"))$impacts)
+  expect_equal(cmp$impacts, compare_methods(m)$impacts)
   expect_output(print(cmp), "Uncertainty \\(100 draws, 0 rejected\\)")
 
   # No distributions: a note.
   c0 <- compare_methods(example_supplement(), n_draws = 10)
   expect_null(c0$draws)
-  expect_match(c0$notes, "No input has a distribution")
+  expect_match(c0$notes, "No input has a distribution", all = FALSE)
   expect_output(print(c0), "No input has a distribution")
   expect_error(compare_methods(m, n_draws = -1), "whole number")
 })
 
 test_that("a draw where one method fails is rejected for every method", {
   # The published method divides by zero for d1 when m = (-A12, 1, 0).
-  e <- deconflate(supp_model(c(1, 1, 1)), n_draws = 0)$conflation$A["d1", "d2"]
+  e <- deconflate(supp_model(c(1, 1, 1)), n_draws = 0)$conflation$A[1, "d2"]
   expect_gt(e, 0)
   m <- cm_model(supp_population(), cm_impacts(ids3, c(2.5, 1, 0)),
                 distributions = list("impact:d1" = dist_fixed(-e)))
-  cmp <- compare_methods(m, methods = c("simultaneous", "published"), n_draws = 4, seed = 1)
-  expect_equal(cmp$methods, c("simultaneous", "published"))     # the central inputs are fine
+  cmp <- compare_methods(m, methods = c("deconflate", "published"), n_draws = 4, seed = 1)
+  expect_equal(cmp$methods, c("deconflate", "published"))     # the central inputs are fine
   expect_equal(cmp$draws$n_rejected, 4)
   expect_true(all(cmp$draws$rejections$type == "nonfinite"))
   expect_match(cmp$draws$rejections$reason, "method published")
   expect_null(cmp$draws$summary)
   expect_output(print(cmp), "<cm_comparison>")
-  # The simultaneous method alone accepts every draw.
-  expect_equal(compare_methods(m, methods = "simultaneous", n_draws = 4, seed = 1)$draws$n_rejected, 0)
+  # The model alone accepts every draw.
+  expect_equal(compare_methods(m, methods = "deconflate", n_draws = 4, seed = 1)$draws$n_rejected, 0)
 })
 
 test_that("compare_methods() draws event models, including the overall risk", {
   m <- unc_event_model()
   cmp <- compare_methods(m, event_model = TRUE, overall_risk = dist_beta(250, 750),
-                         methods = c("first_order", "snapshot"), n_draws = 20, seed = 1)
+                         methods = c("first_order", "deconflate"), n_draws = 20, seed = 1)
   dr <- cmp$draws
-  expect_equal(colnames(dr$params), c("impact:d1", "risk"))
-  expect_equal(unique(dr$summary$method), c("first_order", "snapshot"))
+  expect_equal(colnames(dr$params), c("impacts:1", "risk"))
+  expect_equal(unique(dr$summary$method), c("first_order", "deconflate"))
   expect_true(all(c("total", "fraction") %in% dr$summary$quantity))
   expect_equal(cmp$totals$overall_risk, c(0.25, 0.25))
   res <- deconflate(m, event_model = TRUE, overall_risk = dist_beta(250, 750), n_draws = 20, seed = 1)
-  sn <- dr$summary[dr$summary$method == "snapshot", ]
+  sn <- dr$summary[dr$summary$method == "deconflate", ]
   expect_equal(sn$mean[match(res$draws$summary$quantity, sn$quantity)], res$draws$summary$mean,
                tolerance = 1e-7)
 })
@@ -523,10 +521,10 @@ test_that("batch runs share population draws across analyses", {
                                          "assoc:d3:d2" = dist_lognormal_ci(3, 2, 4.5)),
                       impacts = list(a = list(d1 = dist_normal(2.5, 0.5))))
   expect_s3_class(bs, "cm_batch_sampler")
-  expect_equal(bs$population_keys, c("prob:d1", "assoc:d2:d3"))
-  expect_equal(names(attr(bs$samplers$a, "specs")), c("prob:d1", "assoc:d2:d3", "impact:d1"))
-  expect_equal(names(attr(bs$samplers$b, "specs")), c("prob:d1", "assoc:d2:d3"))
-  mc <- mc_batch(bs, 60, method = "simultaneous", seed = 9)
+  expect_equal(bs$population_keys, c("prob:d1", "associations:3"))
+  expect_equal(names(attr(bs$samplers$a, "specs")), c("prob:d1", "associations:3", "impacts:1"))
+  expect_equal(names(attr(bs$samplers$b, "specs")), c("prob:d1", "associations:3"))
+  mc <- mc_batch(bs, 60, method = "exact", seed = 9)
   expect_s3_class(mc, "cm_mc_batch")
   ra <- mc$analyses$a
   rb <- mc$analyses$b
@@ -540,7 +538,7 @@ test_that("batch runs share population draws across analyses", {
   expect_gt(length(unique(da$raw)), 1)
   expect_equal(unique(db$raw), 1)
   # The same seed gives the same run.
-  expect_identical(mc_batch(bs, 60, method = "simultaneous", seed = 9)$analyses$a$draws, ra$draws)
+  expect_identical(mc_batch(bs, 60, method = "exact", seed = 9)$analyses$a$draws, ra$draws)
   expect_error(batch_sampler(models, impacts = list(zz = list(d1 = dist_fixed(1)))), "Unknown analyses")
   s <- mc_batch_summary(mc)
   expect_equal(names(s)[1], "analysis")
@@ -553,10 +551,10 @@ test_that("possible_pole is flagged when the published denominator changes sign"
   # The published denominator of d2 is m2 + 1.758 (reference_v020_tests.py), so
   # m2 ~ N(0.2, 1.5) reaches both sides of the pole.
   bs <- batch_sampler(list(a = example_supplement()), impacts = list(a = list(d2 = dist_normal(0.2, 1.5))))
-  mc <- mc_batch(bs, 400, method = c("published", "simultaneous"), seed = 4)
+  mc <- mc_batch(bs, 400, method = c("published", "exact"), seed = 4)
   s <- mc_summary(mc$analyses$a)
   expect_equal(s$stability[s$disease == "d2" & s$method == "published"], "possible_pole")
-  expect_false(any(s$stability[s$method == "simultaneous"] == "possible_pole"))
+  expect_false(any(s$stability[s$method == "exact"] == "possible_pole"))
   expect_true(all(s$stability %in% stability_levels))
   # A denominator that keeps its sign is not a pole.
   bs2 <- batch_sampler(list(a = example_supplement()), impacts = list(a = list(d1 = dist_normal(2.5, 0.5))))
@@ -564,8 +562,8 @@ test_that("possible_pole is flagged when the published denominator changes sign"
   expect_false("possible_pole" %in% s2$stability)
   # Equal weights: mean, SD (divisor n) and MCSE = SD / sqrt(n).
   d <- mc$analyses$a$draws
-  x <- d$adjusted[d$disease == "d1" & d$method == "simultaneous"]
-  r <- s[s$disease == "d1" & s$method == "simultaneous", ]
+  x <- d$adjusted[d$disease == "d1" & d$method == "exact"]
+  r <- s[s$disease == "d1" & s$method == "exact", ]
   expect_equal(r$mean, mean(x))
   expect_equal(r$sd, sqrt(mean((x - mean(x))^2)))
   expect_equal(r$mcse, sqrt(sum((x - mean(x))^2)) / length(x))

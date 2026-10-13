@@ -16,17 +16,17 @@ fit_joint(
   fit_iter = 300L,
   calibrate = TRUE,
   seed = NULL,
-  start = NULL
+  start = NULL,
+  pool = c("random", "fixed")
 )
 }
 \arguments{
 \item{model}{A \code{\link[=cm_population]{cm_population()}} or \code{\link[=cm_model]{cm_model()}}.}
 
-\item{tol}{Convergence tolerance of the IPF: maximum absolute deviation of
-any constrained cell probability, recomputed on the returned
-distribution.}
+\item{tol}{Convergence tolerance: maximum absolute deviation of any event
+or disease probability from its target.}
 
-\item{max_iter}{Maximum number of full IPF sweeps.}
+\item{max_iter}{Maximum number of full sweeps.}
 
 \item{max_diseases}{Safety limit on the number of diseases for the exact
 backend (the table has 2^n cells).}
@@ -49,59 +49,67 @@ targets exactly?}
 
 \item{seed}{Optional random seed (sampled backend).}
 
-\item{start}{Optional earlier exact fit to start the IPF from (e.g. the fit
-at the central inputs, when refitting for a draw of the inputs). It is
-used only when it has the same diseases, constrained pairs and three-way
-terms; the result is then the same maximum-entropy distribution, found
-in fewer sweeps.}
+\item{start}{Optional earlier exact fit to start from (e.g. the fit at the
+central inputs, when refitting for a draw of the inputs). It is used
+only when it has the same diseases and association rows (only their
+values may differ); the result is then the same maximum-entropy
+distribution, found in fewer sweeps.}
+
+\item{pool}{\code{"random"} (default) or \code{"fixed"}: how several association
+rows about the same quantity are pooled (see \code{\link[=deconflate]{deconflate()}}).}
 }
 \value{
 A \code{cm_joint} object: \code{cells} (0/1 matrix of combinations), \code{prob}
 (probability of each combination), \code{converged}, \code{iterations},
 \code{max_residual}, \code{backend}, the \code{targets} it was fitted to (used by
-\code{\link[=deconflate]{deconflate()}} to check that a supplied joint matches the model) and,
-for the sampled backend, \code{diagnostics}.
+\code{\link[=deconflate]{deconflate()}} to check that a supplied joint matches the model), the
+pooling of association rows (\code{pooling}) and, for the sampled backend,
+\code{diagnostics}.
 }
 \description{
-The global model needs the probability of every combination of diseases.
-Pairwise tables do not determine it (for three or more diseases there are
-2^n - 1 free probabilities and n(n+1)/2 constraints), so the package uses
-the maximum-entropy distribution that matches the disease probabilities
-and every specified pairwise table: a log-linear model with main effects
-and the two-way terms of the constrained pairs, plus any three-way terms
-from \code{\link[=cm_three_way]{cm_three_way()}}. This is an assumption, not something the pairwise
-evidence identifies. Pairs without an association (unknown pairs) are not
-constrained: their association is whatever the maximum-entropy fit implies
-given the others. A pair given an odds ratio of 1 is constrained to be
-independent.
+The model needs the probability of every combination of diseases. The
+association rows do not determine it (for three or more diseases there are
+2^n - 1 free probabilities), so the package uses the maximum-entropy
+distribution that matches the disease probabilities and every association
+row: the distribution that assumes as little as possible beyond the
+inputs. Pairs that no row mentions (unknown pairs) are not constrained:
+their association is whatever the fit implies given the others. A pair
+given an odds ratio of 1 is constrained to be independent.
+}
+\details{
+Every association row fixes the probability of one event: for a pair row,
+the probability of both diseases; for a row within a subgroup, of both
+diseases within it; for a combination, of all its diseases together (see
+\code{\link[=cm_associations]{cm_associations()}}). Several rows about the same event are pooled (see
+\code{\link[=deconflate]{deconflate()}}). For rows whose event probability depends on other
+probabilities (e.g. an odds ratio within a subgroup, whose margins are
+themselves fitted), the targets are recomputed at the current fit until
+they no longer move.
 }
 \section{Exact backend}{
 
 \code{backend = "exact"} enumerates all 2^n combinations. Starting from
-independence (the product of marginal probabilities; slide 12 of the 2023
-seminar), with the three-way terms put into the starting distribution,
-iterative proportional fitting (IPF) rescales the combination
-probabilities until every pairwise table and marginal is matched. IPF
-keeps every log-linear term of its start that the constraints do not fix,
-so the result is the maximum-entropy distribution with the requested
-three-way terms. Enumeration limits this backend to about 20 diseases.
+independence (the product of the disease probabilities; slide 12 of the
+2023 seminar), iterative proportional fitting on events rescales the
+combination probabilities until every event probability and disease
+probability is matched. The result is the maximum-entropy distribution
+with those event probabilities. Enumeration limits this backend to about
+20 diseases.
 }
 
 \section{Sampled backend}{
 
-\code{backend = "sampled"} fits the same log-linear model without enumerating
-combinations, for larger numbers of diseases:
+\code{backend = "sampled"} fits the same model without enumerating
+combinations, for larger numbers of diseases, when every association row
+is a crude pair row:
 \enumerate{
 \item Calibration: the model's parameters (a main effect per disease and an
-interaction per constrained pair; three-way terms fixed at the log of
-their ratios) are fitted by Monte Carlo moment matching. Gibbs sampling
-from many parallel chains estimates the probabilities and pairwise
-tables implied by the current parameters, and the parameters are
-updated (by the differences in logits and log odds ratios between the
-targets and the estimates) until the estimates match the targets
-within Monte Carlo error. The interaction parameters are conditional
-log odds ratios; they are not set equal to the marginal log odds ratios
-of the inputs (those are only the starting values).
+interaction per constrained pair) are fitted by Monte Carlo moment
+matching. Gibbs sampling from many parallel chains estimates the
+probabilities and pairwise tables implied by the current parameters,
+and the parameters are updated (by the differences in logits and log
+odds ratios between the targets and the estimates) until the estimates
+match the targets within Monte Carlo error.
 \item Sampling: \code{n_samples} combinations are drawn from the calibrated model.
 \item Optionally (\code{calibrate = TRUE}, the default), the weights of the sampled
 combinations are adjusted by IPF so that the disease probabilities and
@@ -110,18 +118,16 @@ remaining Monte Carlo error then affects only higher-order structure.
 }
 
 The result has the same form as the exact one (\code{cells} are the distinct
-sampled combinations, \code{prob} their weights), so the global method,
-interaction offsets, Shapley allocation and the snapshot hazard model of
-event impacts work with it. Its \code{diagnostics} give the constraint
-residuals of the raw sample and after raking, R-hat and effective sample
-sizes of the fitted probabilities across chains, and the Monte Carlo
-errors. Results are approximations with Monte Carlo error: compare runs
-with different seeds, and with the exact backend where n allows.
+sampled combinations, \code{prob} their weights). Its \code{diagnostics} give the
+constraint residuals of the raw sample and after raking, R-hat and
+effective sample sizes across chains, and the Monte Carlo errors. Results
+have Monte Carlo error: compare runs with different seeds, and with the
+exact backend where n allows.
 }
 
 \section{Convergence}{
 
-If the pairwise tables are jointly infeasible, the exact IPF does not
+If the association rows cannot all hold together, the fit does not
 converge. Non-convergence after \code{max_iter} sweeps suggests, but does not
 prove, infeasibility (see \code{\link[=check_feasibility]{check_feasibility()}}). For the sampled backend,
 a calibration that does not converge is reported as unresolved, not as

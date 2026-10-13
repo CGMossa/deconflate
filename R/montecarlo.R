@@ -32,7 +32,17 @@ run_draw <- function(make_model, method, ...) {
   tryCatch(
     withCallingHandlers({
       model <- make_model()
-      rs <- lapply(method, function(m) adjust_impacts(model, method = m, warn = FALSE, ...))
+      rs <- lapply(method, function(m) {
+        switch(m,
+          published = adjust_published(model),
+          exact = {
+            pt <- pair_tables(model)
+            tri <- triple_screen(pt, stats::setNames(model$diseases$prob, model$diseases$disease))
+            if (nrow(tri)) cm_abort("The pairwise associations are jointly infeasible.", class = "deconflate_infeasible")
+            adjust_additive(model, pt = pt, warn = FALSE)
+          },
+          cm_abort(sprintf("Unknown method '%s'.", m)))
+      })
       bad <- !vapply(rs, result_is_finite, logical(1))
       if (any(bad)) {
         cm_abort(sprintf("Non-finite adjusted impacts (method %s).", paste(method[bad], collapse = ", ")),

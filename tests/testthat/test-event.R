@@ -5,24 +5,25 @@
 # attributable risk and its Shapley allocation; and the internal legacy
 # conversions (R/legacy.R). Reference values: inst/validation/reference_v02.py
 # (its "simultaneous" is first_order and its "global" is snapshot),
-# reference_v020_tests.py and reference_v040.py (sections 2, 4, 5, 8, 9).
+# reference_v020_tests.py, reference_v040.py (sections 2, 4, 5, 8, 9) and
+# reference_v041.py (the five-disease culling table).
 
 t2_ids <- c("d1", "d2", "d3")
 
 # Supplementary File population (Rasmussen et al. 2022): P = 0.10, 0.15,
 # 0.20; OR d1:d2 = 2, d1:d3 = 1, d2:d3 = 3.
-t2_pop <- function(three_way = NULL) {
-  cm_population(cm_diseases(t2_ids, c(0.10, 0.15, 0.20)),
-                cm_associations(c("d1", "d1", "d2"), c("d2", "d3", "d3"), c(2, 1, 3)),
-                three_way = three_way)
-}
+t2_pop <- function(extra = NULL) supp_population(extra)
 
 # Event model on a population (default: culling hazard ratios 1.5, 2.0, 1.3).
-t2_event <- function(values = c(1.5, 2.0, 1.3), measure = "HR", estimand = "snapshot_crude",
-                     adjusted_for = NA_character_, pop = t2_pop()) {
-  cm_model(pop, cm_impacts(t2_ids, values, measure = measure, estimand = estimand,
-                           adjusted_for = adjusted_for, label = "culling"))
+t2_event <- function(values = c(1.5, 2.0, 1.3), measure = "HR", adjusted_for = NA_character_, pop = t2_pop()) {
+  cm_model(pop, cm_impacts(t2_ids, values, measure = measure, adjusted_for = adjusted_for, label = "culling"))
 }
+
+# The snapshot model on the model's own joint distribution (internal).
+t2_snap <- function(m, risk = 0.25, ...) adjust_event(m, overall_risk = risk, joint = fit_joint(m), ...)
+# The pairwise approximations (internal; compare_methods()).
+t2_approx <- function(m, method, risk = 0.25, ...) adjust_event_pairwise(m, method, risk, ...)
+one_term <- function(ids) stats::setNames(as.list(ids), ids)
 
 t2_hr_ref <- list(
   published = c(1.4130001998, 1.9090403704, 1.1927014244),
@@ -35,8 +36,8 @@ t2_ar_ref <- 0.03664898509534775   # attributable risk of the snapshot solution 
 # measure's own scale (log for ratios, the difference for RD): crude, or
 # within strata of the diseases in columns s combined with weights
 # d1 d0 / (d1 + d0). h0: baseline hazard (risk-based measures).
-t2_snapshot_measure <- function(joint, beta, i, s = integer(0), kind = "HR", h0 = NULL) {
-  mult <- exp(as.vector(joint$cells %*% beta))
+t2_snapshot_measure <- function(joint, beta, i, s = integer(0), kind = "HR", h0 = NULL, lp = NULL) {
+  mult <- exp(if (is.null(lp)) as.vector(joint$cells %*% beta) else lp)
   val <- if (kind %in% c("HR", "rate_ratio")) mult else 1 - exp(-h0 * mult)
   x <- joint$cells[, i]
   stratum <- if (length(s)) as.integer(joint$cells[, s, drop = FALSE] %*% 2^(seq_along(s) - 1)) else
@@ -59,83 +60,46 @@ t2_snapshot_measure <- function(joint, beta, i, s = integer(0), kind = "HR", h0 
   num / den
 }
 
-# Five-disease example (inst/extdata/five_diseases, point values): culling
-# with mixed measures, crude and stratified estimands, and the LAM:MAS:SCK
-# three-way ratio 1.5.
-t2_five_culling <- function() {
-  ids <- c("LAM", "MAS", "MET", "SCK", "RP")
-  pop <- cm_population(
-    cm_diseases(ids, c(0.25, 0.30, 0.10, 0.35, 0.06),
-                type = c("prevalence", "incidence_rate", "prevalence", "probability", "prevalence")),
-    cm_associations(c("LAM", "LAM", "MET", "MET", "MAS", "MAS", "LAM", "RP", "LAM", "MAS"),
-                    c("MAS", "SCK", "RP", "SCK", "SCK", "MET", "MET", "SCK", "RP", "RP"),
-                    c(1.8, 2.0, 6.0, 1.5, 0.35, 0.08, 0.05, 1.4296875, 1, 1.5),
-                    measure = c("OR", "OR", "OR", "RR", "cond_prob", "RD", "phi", "OR", "OR", "OR")),
-    three_way = cm_three_way("LAM", "MAS", "SCK", 1.5))
-  cm_model(pop, cm_impacts(ids, c(1.74, 1.6, 1.23, 1.45, 0.10),
-                           measure = c("HR", "HR", "RR", "OR", "RD"),
-                           estimand = c("snapshot_crude", "snapshot_stratified", "snapshot_crude",
-                                        "snapshot_crude", "snapshot_stratified"),
-                           adjusted_for = c(NA, "LAM; SCK", NA, NA, "all"), label = "culling"))
-}
-
 test_that("event impacts are validated by cm_impacts()", {
-  ev <- function(...) cm_impacts(..., measure = "HR", estimand = "snapshot_crude")
+  ev <- function(...) cm_impacts(..., measure = "HR")
   expect_error(ev("d1", 0), "positive")
-  expect_error(ev(c("d1", "d1"), c(1.5, 2)), "only one")
-  expect_error(ev(t2_ids, c(1.5, 2)), "one entry per disease")
-  expect_error(cm_impacts("d1", 1.5, measure = "HR", estimand = "snapshot_crude", adjusted_for = "d2"),
+  expect_error(ev(t2_ids, c(1.5, 2)), "one entry per row")
+  expect_error(cm_impacts("d1", 1.5, measure = "HR", estimand = "snapshot_crude"), "no longer used",
                class = "deconflate_unsupported")
-  expect_error(cm_impacts("d1", 1.5, measure = "HR", estimand = "snapshot_stratified"), "adjusted_for")
-  expect_error(cm_impacts("d1", 1.5, measure = "HR", estimand = "cox"), "estimand")
-  expect_error(cm_impacts("d1", 1.5, measure = "HR", estimand = "crude"), "estimand")
-  # The estimand of event impacts has no default.
-  expect_error(cm_impacts(t2_ids, c(1.5, 2, 1.3), measure = "HR"), "State the estimand")
-  expect_error(cm_impacts("d1", 1.5, measure = "hazard", estimand = "snapshot_crude"), "measure")
+  expect_error(cm_impacts("d1", 1.5, measure = "hazard"), "measure")
   # Ratios are positive; risk differences lie in (-1, 1).
   for (m in c("HR", "rate_ratio", "RR", "OR")) {
-    expect_error(cm_impacts("d1", -0.5, measure = m, estimand = "snapshot_crude"), "positive")
+    expect_error(cm_impacts("d1", -0.5, measure = m), "positive")
   }
-  expect_error(cm_impacts("d1", 1, measure = "RD", estimand = "snapshot_crude"), "between -1 and 1")
-  expect_error(cm_impacts("d1", -1, measure = "RD", estimand = "snapshot_crude"), "between -1 and 1")
-  expect_silent(cm_impacts(c("d1", "d2"), c(-0.2, 0), measure = "RD", estimand = "snapshot_crude"))
-  # Snapshot estimands belong to event impacts.
-  expect_error(cm_impacts(t2_ids, c(1.5, 2, 1.3), estimand = "snapshot_crude"),
-               class = "deconflate_unsupported")
-  expect_error(cm_impacts(t2_ids, c(1.5, 2, 1.3), estimand = "snapshot_stratified", adjusted_for = "all"),
-               class = "deconflate_unsupported")
+  expect_error(cm_impacts("d1", 1, measure = "RD"), "between -1 and 1")
+  expect_error(cm_impacts("d1", -1, measure = "RD"), "between -1 and 1")
+  expect_silent(cm_impacts(c("d1", "d2"), c(-0.2, 0), measure = "RD"))
 
-  h <- cm_impacts(t2_ids, c(1.5, 0.04, 1.3), measure = c("HR", "RD", "OR"), estimand = "snapshot_crude")
+  h <- cm_impacts(t2_ids, c(1.5, 0.04, 1.3), measure = c("HR", "RD", "OR"))
   expect_s3_class(h, "cm_impacts")
   expect_equal(attr(h, "kind"), "event")
   expect_equal(h$measure, c("HR", "RD", "OR"))
-  expect_equal(h$estimand, rep("snapshot_crude", 3))
   expect_equal(impact_kind(h), "event")
   expect_equal(attr(cm_impacts(t2_ids, c(1, 2, 3)), "kind"), "additive")
   expect_true(all(is.na(cm_impacts(t2_ids, c(1, 2, 3))$measure)))
+  # Several rows per disease are allowed (fitted together).
+  expect_s3_class(ev(c("d1", "d1"), c(1.5, 2)), "cm_impacts")
 })
 
 test_that("event models are validated by cm_model()", {
-  ev <- function(ids, v, ...) cm_impacts(ids, v, measure = "HR", estimand = "snapshot_crude", ...)
+  ev <- function(ids, v, ...) cm_impacts(ids, v, measure = "HR", ...)
   expect_error(cm_model(t2_pop(), ev(c("d1", "d2"), c(1.5, 2))), "No impact for: d3")
   expect_error(cm_model(t2_pop(), ev(c("d1", "d2"), c(1.5, 2))), "1 for ratios, 0 for risk differences")
-  expect_error(cm_model(t2_pop(), ev(c(t2_ids, "zz"), c(1.5, 2, 1.3, 1))), "unknown diseases")
-  expect_error(cm_model(t2_pop(), cm_impacts(t2_ids, c(1.5, 2, 1.3), measure = "HR",
-                                             estimand = c("snapshot_stratified", "snapshot_crude", "snapshot_crude"),
-                                             adjusted_for = c("zz", NA, NA))),
-               "unknown diseases")
-  # Impacts are put in the population's disease order.
-  m <- cm_model(t2_pop(), cm_impacts(rev(t2_ids), c(0.05, 2.0, 1.5), measure = c("RD", "HR", "OR"),
-                                     estimand = "snapshot_crude"))
-  expect_equal(m$impacts$disease, t2_ids)
-  expect_equal(m$impacts$value, c(1.5, 2.0, 0.05))
-  expect_equal(m$impacts$measure, c("OR", "HR", "RD"))
+  expect_error(cm_model(t2_pop(), ev(c(t2_ids, "zz"), c(1.5, 2, 1.3, 1))), "unknown disease")
+  expect_error(cm_model(t2_pop(), ev(c(t2_ids, "d1;zz"), c(1.5, 2, 1.3, 1))), "unknown disease")
+  # Rows keep their order; results are in disease order.
+  m <- cm_model(t2_pop(), cm_impacts(rev(t2_ids), c(0.05, 2.0, 1.5), measure = c("RD", "HR", "OR")))
+  expect_equal(m$impacts$disease, rev(t2_ids))
   expect_equal(impact_kind(m$impacts), "event")
-  # Interactions apply to additive impacts only.
-  expect_error(cm_model(t2_pop(), ev(t2_ids, c(1.5, 2, 1.3)), cm_interactions("d1", "d2", 0.5)),
-               class = "deconflate_unsupported")
-  expect_error(cm_model(t2_pop(), ev(t2_ids, c(1.5, 2, 1.3)), cm_interactions("d1", "d2", 0.5)),
-               "additive impacts only")
+  r <- deconflate(m, event_model = TRUE, overall_risk = 0.25, n_draws = 0)
+  expect_equal(r$adjusted$disease, t2_ids)
+  expect_equal(r$adjusted$measure, c("OR", "HR", "RD"))
+  # Interactions: combination rows (set_interaction() is for additive impacts).
   expect_error(set_interaction(t2_event(), "d1", "d2", 0.5), class = "deconflate_unsupported")
   expect_output(print(t2_event()), "event impacts: use event_model = TRUE")
   expect_output(print(t2_event()), "Measures: HR: 3")
@@ -158,8 +122,8 @@ test_that("additive and event impacts must match event_model, which needs overal
   expect_error(deconflate(m, event_model = TRUE, overall_risk = dist_normal(0.25, 0.1)),
                "must lie between 0 and 1")
   # The internal engines check the kind of impacts too.
-  expect_error(adjust_impacts(m), class = "deconflate_unsupported")
-  expect_error(adjust_event(example_supplement(), overall_risk = 0.25), class = "deconflate_unsupported")
+  expect_error(adjust_event(example_supplement(), overall_risk = 0.25, joint = fit_joint(example_supplement())),
+               class = "deconflate_unsupported")
   expect_error(compare_methods(m), class = "deconflate_unsupported")
   expect_error(screen_associations(m), class = "deconflate_unsupported")
   expect_error(screen_associations(example_supplement(), event_model = TRUE, overall_risk = 0.25),
@@ -176,7 +140,6 @@ test_that("the snapshot model matches the reference (supplement hazard ratios)",
   expect_equal(res$adjusted$raw, c(1.5, 2.0, 1.3))
   expect_equal(res$adjusted$adjusted, t2_hr_ref$snapshot, tolerance = 1e-7)
   expect_equal(res$adjusted$change, res$adjusted$adjusted / res$adjusted$raw - 1)
-  expect_equal(res$adjusted$estimand, rep("snapshot_crude", 3))
   expect_equal(res$diagnostics$n_sign_changes, 0)
   expect_lt(res$diagnostics$max_reconstruction_residual, 1e-9)
   expect_s3_class(res$joint, "cm_joint")
@@ -189,12 +152,9 @@ test_that("the snapshot model matches the reference (supplement hazard ratios)",
   expect_length(deconflate(t2_event(), event_model = TRUE, overall_risk = 0.25, n_draws = 0)$notes, 0)
   expect_output(print(res), "cm_event_result")
   expect_output(print(res), "Attributable risk by disease")
-  # The method argument is not used for event impacts.
-  expect_equal(deconflate(t2_event(), method = "global", event_model = TRUE, overall_risk = 0.25)$method,
-               "snapshot")
-  rs <- deconflate(t2_event(), method = "simultaneous", event_model = TRUE, overall_risk = 0.25, n_draws = 0)
-  expect_equal(rs$adjusted$adjusted, res$adjusted$adjusted)
-  expect_match(rs$notes, "was not used", all = FALSE)
+  # There is no method argument.
+  expect_error(deconflate(t2_event(), method = "global", event_model = TRUE, overall_risk = 0.25),
+               "has been removed")
   # The published approximation is not a method of deconflate().
   expect_error(deconflate(t2_event(), method = "published", event_model = TRUE, overall_risk = 0.25),
                class = "deconflate_unsupported")
@@ -204,10 +164,11 @@ test_that("the snapshot model matches the reference (supplement hazard ratios)",
 
 test_that("first-order and published approximations match the reference", {
   m <- t2_event()
-  for (meth in c("published", "first_order", "snapshot")) {
-    r <- adjust_event(m, method = meth, overall_risk = 0.25)
+  rs <- list(published = t2_approx(m, "published"), first_order = t2_approx(m, "first_order"),
+             snapshot = t2_snap(m))
+  for (meth in names(rs)) {
+    r <- rs[[meth]]
     expect_s3_class(r, "cm_event_result")
-    expect_equal(r$method, meth)
     expect_equal(r$adjusted$adjusted, t2_hr_ref[[meth]], tolerance = 1e-7)
     expect_equal(r$diagnostics$n_sign_changes, 0)
     # Every method has a joint distribution (for the attributable risk).
@@ -215,19 +176,21 @@ test_that("first-order and published approximations match the reference", {
     expect_equal(sum(r$attributable$by_disease$attributable), r$attributable$summary$attributable,
                  tolerance = 1e-10)
   }
+  expect_equal(rs$published$method, "published")
+  expect_equal(rs$first_order$method, "first_order")
+  expect_equal(rs$snapshot$method, "snapshot")
   # The first-order solution solves log(HR_raw) = A beta exactly.
-  fo <- adjust_event(m, method = "first_order", overall_risk = 0.25)
-  expect_lt(fo$diagnostics$max_reconstruction_residual, 1e-12)
+  expect_lt(rs$first_order$diagnostics$max_reconstruction_residual, 1e-12)
 
   cmp <- compare_methods(m, event_model = TRUE, overall_risk = 0.25)
   expect_s3_class(cmp, "cm_comparison")
-  expect_equal(cmp$methods, c("published", "first_order", "snapshot"))
-  expect_equal(names(cmp$impacts), c("disease", "measure", "raw", "published", "first_order", "snapshot"))
-  for (meth in names(t2_hr_ref)) {
-    expect_equal(cmp$impacts[[meth]], t2_hr_ref[[meth]], tolerance = 1e-7)
-  }
+  expect_equal(cmp$methods, c("published", "first_order", "deconflate"))
+  expect_equal(names(cmp$impacts), c("disease", "measure", "raw", "published", "first_order", "deconflate"))
+  expect_equal(cmp$impacts$published, t2_hr_ref$published, tolerance = 1e-7)
+  expect_equal(cmp$impacts$first_order, t2_hr_ref$first_order, tolerance = 1e-7)
+  expect_equal(cmp$impacts$deconflate, t2_hr_ref$snapshot, tolerance = 1e-7)
   expect_equal(names(cmp$totals), c("method", "overall_risk", "disease_free_risk", "attributable"))
-  expect_equal(cmp$totals$attributable[cmp$totals$method == "snapshot"], t2_ar_ref, tolerance = 1e-7)
+  expect_equal(cmp$totals$attributable[cmp$totals$method == "deconflate"], t2_ar_ref, tolerance = 1e-7)
   expect_equal(cmp$totals$overall_risk, rep(0.25, 3))
   expect_false(any(cmp$long$sign_change))
   expect_length(cmp$failed, 0)
@@ -241,17 +204,16 @@ test_that("the snapshot model reproduces the raw hazard ratios over the fitted j
   expect_equal(exp(vapply(1:3, function(i) t2_snapshot_measure(res$joint, beta, i), numeric(1))),
                c(1.5, 2.0, 1.3), tolerance = 1e-9)
   # A supplied joint gives the same answer; a joint of another population
-  # (here with a three-way term) is rejected.
+  # (here with an OR_ratio row) is rejected.
   j <- fit_joint(t2_pop())
   expect_equal(deconflate(t2_event(), event_model = TRUE, overall_risk = 0.25, joint = j)$adjusted$adjusted,
                res$adjusted$adjusted, tolerance = 1e-12)
-  j3 <- fit_joint(t2_pop(cm_three_way("d1", "d2", "d3", 2)))
-  expect_error(deconflate(t2_event(), event_model = TRUE, overall_risk = 0.25, joint = j3), "three-way terms")
-  # A joint supplied to the pairwise approximations is checked and kept.
-  fo <- adjust_event(t2_event(), method = "first_order", overall_risk = 0.25, joint = j)
+  j3 <- fit_joint(t2_pop(cm_associations("d1", "d2", 2, measure = "OR_ratio", among = "d3")))
+  expect_error(deconflate(t2_event(), event_model = TRUE, overall_risk = 0.25, joint = j3), "association rows")
+  # A joint supplied to the pairwise approximations is kept.
+  fo <- t2_approx(t2_event(), "first_order", joint = j)
   expect_identical(fo$joint, j)
   expect_equal(fo$adjusted$adjusted, t2_hr_ref$first_order, tolerance = 1e-8)
-  expect_error(adjust_event(t2_event(), method = "published", overall_risk = 0.25, joint = j3), "three-way terms")
 })
 
 test_that("hazard-ratio results do not depend on the overall risk; the attributable risk does", {
@@ -296,48 +258,57 @@ test_that("risk ratios, odds ratios and risk differences reproduce the hazard-ra
   expect_error(deconflate(mixed, event_model = TRUE), "overall_risk")
   # Only the snapshot model handles risk-based rows.
   for (meth in c("first_order", "published")) {
-    expect_error(adjust_event(mixed, method = meth, overall_risk = 0.25), class = "deconflate_unsupported")
+    expect_error(t2_approx(mixed, meth), class = "deconflate_unsupported")
   }
   cmp <- compare_methods(mixed, event_model = TRUE, overall_risk = 0.25)
-  expect_equal(cmp$methods, "snapshot")
+  expect_equal(cmp$methods, "deconflate")
   expect_setequal(names(cmp$failed), c("published", "first_order"))
   expect_match(cmp$failed[["first_order"]], "hazard or rate ratios")
 })
 
-test_that("mixed measures, crude and stratified, match the five-disease reference", {
-  m <- t2_five_culling()
+test_that("mixed measures, crude, stratified and a combination match the five-disease reference", {
+  m <- read_five("culling.csv")
   res <- deconflate(m, event_model = TRUE, overall_risk = 0.25, n_draws = 0)
-  expect_equal(res$adjusted$disease, c("LAM", "MAS", "MET", "SCK", "RP"))
-  expect_equal(res$adjusted$measure, c("HR", "HR", "RR", "OR", "RD"))
-  expect_equal(res$adjusted$adjusted, c(1.58344491, 1.57873827, 1.08072624, 1.19114596, 1.50176712),
-               tolerance = 1e-7)
-  expect_equal(is.na(res$adjusted$change), c(FALSE, FALSE, TRUE, TRUE, TRUE))
-  expect_equal(res$adjusted$adjusted_for, c(NA, "LAM; SCK", NA, NA, "all"))
+  expect_equal(res$adjusted$disease, c("LAM", "MAS", "MET", "SCK", "RP", "LAM;MAS"))
+  expect_equal(res$adjusted$kind, c(rep("disease", 5), "interaction"))
+  expect_equal(res$adjusted$measure, c("HR", "HR", "RR", "OR", "RD", "HR"))
+  # Python reference (reference_v041.py).
+  expect_equal(res$adjusted$adjusted, c(1.060298968, 1.2342866774, 1.080381173, 1.1753668593, 1.509273874,
+                                        2.2779452712), tolerance = 1e-7)
+  expect_equal(is.na(res$adjusted$change), c(FALSE, FALSE, TRUE, TRUE, TRUE, TRUE))
+  expect_equal(res$estimates$adjusted_for[1:6], c(NA, "LAM;SCK", NA, NA, "all", NA))
   a <- res$attributable
-  expect_equal(a$summary$attributable, 0.0697502441, tolerance = 1e-8)
+  expect_equal(a$summary$attributable, 0.0541469811, tolerance = 1e-8)
   expect_equal(a$by_disease$attributable,
-               c(0.0248718025, 0.0256191332, 0.0015698203, 0.0123310667, 0.0053584214), tolerance = 1e-8)
+               c(0.0137316223, 0.0218514738, 0.0015789582, 0.0114739881, 0.0055109386), tolerance = 1e-8)
   expect_equal(sum(a$by_disease$attributable), a$summary$attributable, tolerance = 1e-10)
   expect_equal(a$summary$unallocated, 0, tolerance = 1e-10)
-  # Each row is reproduced on its own scale: crude, stratified by LAM and
-  # SCK, and stratified by all other diseases.
-  beta <- log(res$adjusted$adjusted)
-  h0 <- a$baseline_hazard
+  # Each single-disease row is reproduced on its own scale: crude, stratified
+  # by LAM and SCK, and stratified by all other diseases; with the LAM:MAS
+  # interaction in the linear predictor.
   j <- res$joint
-  got <- c(t2_snapshot_measure(j, beta, 1, kind = "HR"),
-           t2_snapshot_measure(j, beta, 2, s = c(1, 4), kind = "HR"),
-           t2_snapshot_measure(j, beta, 3, kind = "RR", h0 = h0),
-           t2_snapshot_measure(j, beta, 4, kind = "OR", h0 = h0),
-           t2_snapshot_measure(j, beta, 5, s = 1:4, kind = "RD", h0 = h0))
+  lp <- as.vector(term_matrix(j$cells, res$terms) %*% log(res$adjusted$adjusted))
+  h0 <- a$baseline_hazard
+  got <- c(t2_snapshot_measure(j, NULL, 1, kind = "HR", lp = lp),
+           t2_snapshot_measure(j, NULL, 2, s = c(1, 4), kind = "HR", lp = lp),
+           t2_snapshot_measure(j, NULL, 3, kind = "RR", h0 = h0, lp = lp),
+           t2_snapshot_measure(j, NULL, 4, kind = "OR", h0 = h0, lp = lp),
+           t2_snapshot_measure(j, NULL, 5, s = 1:4, kind = "RD", h0 = h0, lp = lp))
   expect_equal(got, c(log(c(1.74, 1.6, 1.23, 1.45)), 0.10), tolerance = 1e-9)
+  # The combination row: cows with both LAM and MAS against cows with neither.
+  both <- j$cells[, "LAM"] == 1 & j$cells[, "MAS"] == 1
+  neither <- j$cells[, "LAM"] == 0 & j$cells[, "MAS"] == 0
+  mult <- exp(lp)
+  hr <- (sum(j$prob[both] * mult[both]) / sum(j$prob[both])) / (sum(j$prob[neither] * mult[neither]) / sum(j$prob[neither]))
+  expect_equal(hr, 3.2, tolerance = 1e-9)
 })
 
-test_that("three-way terms change the snapshot model only", {
-  m3 <- t2_event(pop = t2_pop(cm_three_way("d1", "d2", "d3", 2)))
-  expect_equal(adjust_event(m3, method = "first_order", overall_risk = 0.25)$adjusted$adjusted,
-               t2_hr_ref$first_order, tolerance = 1e-8)
-  expect_equal(adjust_event(m3, method = "published", overall_risk = 0.25)$adjusted$adjusted,
-               t2_hr_ref$published, tolerance = 1e-8)
+test_that("OR_ratio rows change the snapshot model only", {
+  # With three diseases, an OR_ratio row is the log-linear three-way term of
+  # earlier versions.
+  m3 <- t2_event(pop = t2_pop(cm_associations("d1", "d2", 2, measure = "OR_ratio", among = "d3")))
+  expect_equal(t2_approx(m3, "first_order")$adjusted$adjusted, t2_hr_ref$first_order, tolerance = 1e-8)
+  expect_equal(t2_approx(m3, "published")$adjusted$adjusted, t2_hr_ref$published, tolerance = 1e-8)
   snap <- deconflate(m3, event_model = TRUE, overall_risk = 0.25, n_draws = 0)
   expect_gt(max(abs(snap$adjusted$adjusted - t2_hr_ref$snapshot)), 1e-3)
   # Independent Python solutions (reference_v020_tests.py; reference_v040.py, section 8).
@@ -351,11 +322,9 @@ test_that("three-way terms change the snapshot model only", {
 })
 
 test_that("stratified hazard ratios are matched within strata of their adjustment set", {
-  m <- t2_event(estimand = c("snapshot_stratified", "snapshot_crude", "snapshot_crude"),
-                adjusted_for = c("d2", NA, NA))
+  m <- t2_event(adjusted_for = c("d2", NA, NA))
   res <- deconflate(m, event_model = TRUE, overall_risk = 0.25, n_draws = 0)
-  expect_equal(res$adjusted$estimand, c("snapshot_stratified", "snapshot_crude", "snapshot_crude"))
-  expect_equal(res$adjusted$adjusted_for, c("d2", NA, NA))
+  expect_equal(res$estimates$adjusted_for[1:3], c("d2", NA, NA))
   beta <- log(res$adjusted$adjusted)
   expect_equal(t2_snapshot_measure(res$joint, beta, 1, s = 2), log(1.5), tolerance = 1e-9)
   expect_equal(exp(vapply(2:3, function(i) t2_snapshot_measure(res$joint, beta, i), numeric(1))),
@@ -364,27 +333,25 @@ test_that("stratified hazard ratios are matched within strata of their adjustmen
   expect_equal(res$adjusted$adjusted, c(1.504714547766569, 1.8751068533634567, 1.1457314393824285),
                tolerance = 1e-7)
   # The published approach is defined for crude hazard ratios only.
-  expect_error(adjust_event(m, method = "published", overall_risk = 0.25), class = "deconflate_unsupported")
-  expect_error(adjust_event(m, method = "published", overall_risk = 0.25), "crude hazard ratios only")
-  # The first-order approximation accepts stratified estimands.
-  fo <- adjust_event(m, method = "first_order", overall_risk = 0.25)
+  expect_error(t2_approx(m, "published"), class = "deconflate_unsupported")
+  expect_error(t2_approx(m, "published"), "crude hazard ratios only")
+  # The first-order approximation accepts stratified estimates.
+  fo <- t2_approx(m, "first_order")
   expect_true(all(is.finite(fo$adjusted$adjusted)))
   cmp <- compare_methods(m, event_model = TRUE, overall_risk = 0.25)
-  expect_equal(cmp$methods, c("first_order", "snapshot"))
+  expect_equal(cmp$methods, c("first_order", "deconflate"))
   expect_match(cmp$failed[["published"]], "crude hazard ratios only")
 })
 
-test_that("hazard ratios stratified by all other diseases are used as they are", {
-  m <- t2_event(estimand = "snapshot_stratified", adjusted_for = "all")
-  for (meth in c("snapshot", "first_order")) {
-    r <- adjust_event(m, method = meth, overall_risk = 0.25)
+test_that("hazard ratios adjusted for all other diseases are used as they are", {
+  m <- t2_event(adjusted_for = "all")
+  for (r in list(t2_snap(m), t2_approx(m, "first_order"))) {
     expect_equal(r$adjusted$adjusted, c(1.5, 2.0, 1.3), tolerance = 1e-10)
     expect_equal(r$adjusted$change, c(0, 0, 0), tolerance = 1e-10)
   }
-  expect_error(adjust_event(m, method = "published", overall_risk = 0.25), class = "deconflate_unsupported")
-  # Mixed: d1 stratified by all, the others crude. d1 keeps its value.
-  mix <- deconflate(t2_event(estimand = c("snapshot_stratified", "snapshot_crude", "snapshot_crude"),
-                             adjusted_for = c("all", NA, NA)),
+  expect_error(t2_approx(m, "published"), class = "deconflate_unsupported")
+  # Mixed: d1 adjusted for all, the others crude. d1 keeps its value.
+  mix <- deconflate(t2_event(adjusted_for = c("all", NA, NA)),
                     event_model = TRUE, overall_risk = 0.25, n_draws = 0)
   expect_equal(mix$adjusted$adjusted[1], 1.5, tolerance = 1e-10)
   expect_equal(exp(vapply(2:3, function(i) t2_snapshot_measure(mix$joint, log(mix$adjusted$adjusted), i),
@@ -394,8 +361,7 @@ test_that("hazard ratios stratified by all other diseases are used as they are",
 
 test_that("hazard ratios of 1 stay 1 and give no attributable risk", {
   m <- t2_event(c(1, 1, 1))
-  for (meth in c("snapshot", "first_order", "published")) {
-    r <- adjust_event(m, method = meth, overall_risk = 0.25)
+  for (r in list(t2_snap(m), t2_approx(m, "first_order"), t2_approx(m, "published"))) {
     expect_equal(r$adjusted$adjusted, c(1, 1, 1), tolerance = 1e-12)
     expect_equal(r$diagnostics$n_sign_changes, 0)
   }
@@ -430,11 +396,11 @@ test_that("the attributable risk and its Shapley allocation match the reference"
   expect_equal(ct$measure, rep("HR", 3))
 
   # Without allocation (internal), and the first-order approximation.
-  ea <- event_attributable(log(res$adjusted$adjusted), res$joint, 0.25, allocate = FALSE)
+  ea <- event_attributable(log(res$adjusted$adjusted), res$joint, 0.25, one_term(t2_ids), allocate = FALSE)
   expect_null(ea$by_disease)
   expect_true(is.na(ea$summary$unallocated))
   expect_equal(ea$summary$attributable, ar$summary$attributable, tolerance = 1e-12)
-  fo <- adjust_event(t2_event(), method = "first_order", overall_risk = 0.25)
+  fo <- t2_approx(t2_event(), "first_order")
   expect_equal(sum(fo$attributable$by_disease$attributable), fo$attributable$summary$attributable,
                tolerance = 1e-10)
   # An overall risk given as a distribution is used at its mean.
@@ -446,7 +412,7 @@ test_that("the attributable risk and its Shapley allocation match the reference"
 test_that("the allocation reports what it cannot allocate", {
   res <- deconflate(t2_event(), event_model = TRUE, overall_risk = 0.25, n_draws = 0)
   beta <- log(res$adjusted$adjusted)
-  expect_silent(ea <- event_attributable(beta, res$joint, 0.25, max_present = 2))
+  expect_silent(ea <- event_attributable(beta, res$joint, 0.25, one_term(t2_ids), max_present = 2))
   s <- ea$summary
   expect_gt(s$unallocated, 0)
   expect_equal(sum(ea$by_disease$attributable) + s$unallocated, s$attributable, tolerance = 1e-12)
@@ -455,7 +421,7 @@ test_that("the allocation reports what it cannot allocate", {
   all3 <- rowSums(j$cells) == 3
   excess <- 1 - exp(-ea$baseline_hazard * prod(res$adjusted$adjusted)) - s$disease_free_risk
   expect_equal(s$unallocated, j$prob[all3] * excess, tolerance = 1e-10)
-  expect_equal(event_attributable(beta, res$joint, 0.25, max_present = 3)$summary$unallocated, 0,
+  expect_equal(event_attributable(beta, res$joint, 0.25, one_term(t2_ids), max_present = 3)$summary$unallocated, 0,
                tolerance = 1e-12)
 })
 
@@ -481,7 +447,7 @@ test_that("adjusted hazard ratios on the other side of 1 are warned about", {
   expect_silent(cmp <- compare_methods(m, event_model = TRUE, overall_risk = 0.25))
   sc <- stats::setNames(cmp$long$sign_change[cmp$long$disease == "d1"],
                         cmp$long$method[cmp$long$disease == "d1"])
-  expect_true(sc[["snapshot"]])
+  expect_true(sc[["deconflate"]])
   expect_false(sc[["published"]])
 })
 
@@ -489,19 +455,17 @@ test_that("non-positive published hazard ratios are flagged and have no attribut
   # HR 0.5 for d1 with a strong d2: the published denominator of d1 is
   # negative (reference_v02.py hr_methods).
   m <- t2_event(c(0.5, 4, 1))
-  expect_warning(pub <- adjust_event(m, method = "published", overall_risk = 0.25),
-                 class = "deconflate_nonfinite_warning")
+  pub <- t2_approx(m, "published")
   expect_equal(pub$adjusted$adjusted, c(-0.3585461449, 4.0376405055, 1), tolerance = 1e-8)
   expect_equal(pub$diagnostics$n_sign_changes, 0)
   expect_null(pub$attributable)
   expect_false(result_is_finite(pub))
-  expect_silent(adjust_event(m, method = "published", overall_risk = 0.25, warn = FALSE))
-  cmp <- compare_methods(m, event_model = TRUE, overall_risk = 0.25, methods = c("published", "snapshot"))
-  expect_equal(cmp$methods, "snapshot")
+  cmp <- compare_methods(m, event_model = TRUE, overall_risk = 0.25, methods = c("published", "deconflate"))
+  expect_equal(cmp$methods, "deconflate")
   expect_match(cmp$failed[["published"]], "^undefined")
   expect_s3_class(cmp$undefined$published, "cm_event_result")
   # The other methods keep the hazard ratios positive.
-  expect_equal(adjust_event(m, method = "first_order", overall_risk = 0.25)$adjusted$adjusted,
+  expect_equal(t2_approx(m, "first_order")$adjusted$adjusted,
                c(0.4268305992, 4.4915295004, 0.7780752535), tolerance = 1e-8)
   snap <- deconflate(m, event_model = TRUE, overall_risk = 0.25, n_draws = 0)
   expect_equal(snap$adjusted$adjusted, c(0.4021045208, 4.487174924, 0.7095065051), tolerance = 1e-7)
@@ -509,9 +473,7 @@ test_that("non-positive published hazard ratios are flagged and have no attribut
 })
 
 test_that("unknown pairs are filled in by the snapshot model; the approximations need every pair", {
-  pop <- cm_population(cm_diseases(t2_ids, c(0.10, 0.15, 0.20)),
-                       cm_associations(c("d1", "d2"), c("d2", "d3"), c(2, 3)))
-  m <- t2_event(pop = pop)
+  m <- t2_event(pop = supp_unknown_population())
   res <- deconflate(m, event_model = TRUE, overall_risk = 0.25, n_draws = 0)
   expect_equal(res$method, "snapshot")
   expect_equal(nrow(res$unknown_pairs), 1)
@@ -521,10 +483,10 @@ test_that("unknown pairs are filled in by the snapshot model; the approximations
   expect_gt(abs(res$unknown_pairs$fitted_or - 1), 1e-3)
   expect_gt(max(abs(res$adjusted$adjusted - t2_hr_ref$snapshot)), 1e-4)
   for (meth in c("first_order", "published")) {
-    expect_error(adjust_event(m, method = meth, overall_risk = 0.25), class = "deconflate_unknown_pairs")
+    expect_error(t2_approx(m, meth), class = "deconflate_unknown_pairs")
   }
   cmp <- compare_methods(m, event_model = TRUE, overall_risk = 0.25)
-  expect_equal(cmp$methods, "snapshot")
+  expect_equal(cmp$methods, "deconflate")
   expect_match(cmp$failed[["first_order"]], "every pair")
 })
 
@@ -551,7 +513,6 @@ test_that("global dairy culling: unknown pairs, overall risk 0.2366", {
   skip_on_cran()
   m <- example_global_dairy("culling")
   expect_equal(unique(m$impacts$measure), "HR")
-  expect_equal(unique(m$impacts$estimand), "snapshot_crude")
   expect_warning(res <- deconflate(m, event_model = TRUE, overall_risk = 0.2366, n_draws = 0),
                  class = "deconflate_sign_change")
   expect_equal(res$adjusted$disease, c("CK", "CM", "DA", "DYS", "LAM", "MET", "MF", "OC", "PTB", "RP", "SCK", "SCM"))
@@ -574,27 +535,24 @@ test_that("global dairy culling with unlisted pairs independent: the three metho
   m <- cm_model(with_independent_pairs(as_population(m0)), m0$impacts)
   expect_equal(nrow(pair_tables(m)), 66)
   expect_true(all(pair_tables(m)$status == "specified"))
-  pub <- adjust_event(m, method = "published", overall_risk = 0.2366, warn = FALSE, allocate = FALSE)
+  pub <- t2_approx(m, "published", 0.2366)
   expect_equal(pub$adjusted$adjusted,
                c(1.1775803801, 1.9039406263, 2.1979299277, 1.0983766711, 1.3806827011, 1.0124105823,
                  2.6476374499, 1.4586441181, 2.0472349212, 1.2844963465, 1.6752532746, 1.2549275636),
                tolerance = 1e-8)
   # Identical to adjusting HR - 1 additively with the published method, as
   # in Rasmussen et al. (2024).
-  legacy <- adjust_impacts(global_dairy_analyses("analysis", culling = TRUE)$culling_hr_minus_1,
-                           method = "published", warn = FALSE)
+  legacy <- adjust_published(global_dairy_analyses("analysis", culling = TRUE)$culling_hr_minus_1)
   expect_equal(pub$adjusted$adjusted, 1 + legacy$adjusted$adjusted, tolerance = 1e-12)
 
-  expect_warning(adjust_event(m, method = "first_order", overall_risk = 0.2366, allocate = FALSE),
-                 class = "deconflate_sign_change")
-  fo <- adjust_event(m, method = "first_order", overall_risk = 0.2366, warn = FALSE, allocate = FALSE)
+  fo <- t2_approx(m, "first_order", 0.2366)
   expect_equal(fo$adjusted$adjusted,
                c(0.9619070191, 1.8350863583, 1.825054203, 1.1165198124, 1.2864922835, 0.7369878787,
                  2.6233669144, 1.5487477113, 2.0203081931, 1.2305973733, 1.7412069142, 1.2520841682),
                tolerance = 1e-8)
   expect_equal(fo$diagnostics$sign_changes, "CK, MET")
 
-  snap <- adjust_event(m, method = "snapshot", overall_risk = 0.2366, warn = FALSE, allocate = FALSE)
+  snap <- t2_snap(m, 0.2366, warn = FALSE, allocate = FALSE)
   expect_equal(snap$adjusted$adjusted,
                c(0.9821306495, 1.8193535917, 1.8476664195, 1.050543232, 1.2230209916, 0.7198426768,
                  2.6601485634, 1.5579660463, 2.0165455108, 1.1816994757, 1.7107120034, 1.210900523),

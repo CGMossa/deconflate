@@ -21,7 +21,7 @@ Optional packages (`Suggests`):
 
 | Package | Used for |
 |---|---|
-| `lpSolve` | The exact feasibility check (`check_feasibility(method = "lp")`, `deconflate(feasibility = "lp")`). Without it, the triple screen is used. |
+| `lpSolve` | The exact feasibility check of the pairwise tables (`check_feasibility(method = "lp")`). Without it, the triple screen is used. |
 | `knitr`, `rmarkdown` | Building the vignettes. |
 | `testthat` (>= 3.0.0) | Running the tests. |
 | `remotes` | Installing from GitHub (see above). |
@@ -33,12 +33,14 @@ and `scipy`; they are not needed to use or test the package.
 
 ## How it works
 
-A model has the disease probabilities, their pairwise associations and **one** table of impact estimates. You give each table as a CSV file (with any name) or a data frame, and adjust one impact table per call; for several outcomes, repeat the call. The package assumes no species, outcome or unit.
+A model has three tables: the diseases, the association estimates and **one** table of impact estimates. You give each table as a CSV file (with any name) or a data frame, and adjust one impact table per call; for several outcomes, repeat the call. The package assumes no species, outcome or unit.
 
-* **Additive impacts** (the default) are in any units (kg of milk, percent of yield, days, euros, welfare scores), the same for every row; results come back in those units. Each estimate declares its estimand: a crude comparison (`"crude"`) or the coefficient of an additive regression adjusted for named diseases (`"adjusted_linear"`). Pairwise interactions can be added.
+Every association and impact row has the same core columns: `disease`, `among` (a subgroup), `adjusted_for`, `measure` and `value`. A row can be about one disease or a combination (`"MAS;SCK"`), hold in the whole population or within a subgroup (`"SCK"`, `"no SCK"`, `"no others"`), and be crude or adjusted for other diseases; several rows can describe the same thing (several studies), and are pooled or fitted together.
+
+* **Additive impacts** (the default) are in any units (kg of milk, percent of yield, days, euros, welfare scores), the same for every row; results come back in those units. A row about a combination adds an interaction.
 * **Event impacts** (`event_model = TRUE`, with `overall_risk`) are hazard ratios, rate ratios, risk ratios, odds ratios or risk differences of an event such as culling or death, which can be mixed. They are adjusted with the snapshot hazard model, and the result includes the risk attributable to disease, split by disease.
 
-`method = "auto"` (the default) uses the simultaneous method (the exact solution of `raw = A b` from the pairwise 2×2 tables) when every pair has an association and there are no interactions or three-way terms; otherwise it uses the global method (the maximum-entropy distribution of disease combinations), with a note saying why. Pairs without an association are unknown and are filled in by the global fit; an odds ratio of 1 states that two diseases are unrelated.
+There is one model: the maximum-entropy distribution of disease combinations that matches every association row, and the impacts (and interactions) that reproduce every impact row. Pairs without an association are unknown and are filled in by the fit; an odds ratio of 1 states that two diseases are unrelated. When the pairwise 2×2 tables give the same answer (additive impacts, crude pair rows for every pair and nothing else, impact rows about single diseases in the whole population), `deconflate()` uses them directly.
 
 Inputs can carry distributions; `deconflate()` then runs 1000 draws by default (`n_draws`) and reports intervals. The proportional approximation of Rasmussen et al. (2022, eq. 16) is not a method of `deconflate()`: it is kept as `"published"` in `compare_methods()` and the `reproduce_*()` functions, for comparison and reproduction only.
 
@@ -78,8 +80,8 @@ reproduce_rasmussen_2022()
 
 ## Features
 
-- **Inputs:** `cm_read_inputs()` reads CSV files or data frames (each table a named argument) and reports every problem at once (`cm_check_inputs()`); uncertain values carry their distribution in their own row (`dist`, `p1`-`p4`), mixed freely with point values. `cm_template()` writes example files, and `system.file("extdata", "five_diseases", package = "deconflate")` holds a five-disease example that uses every feature, with a script (`run_all_features.R`) that runs them all. In R: `cm_diseases()`, `cm_associations()` (OR, RR, RD, conditional probability, phi), `cm_three_way()`, `cm_population()`, `cm_impacts()`, `cm_interactions()` and `cm_model()`.
-- **Adjustment:** `deconflate()` for additive and event impacts, with intervals (`n_draws`); `compare_methods()` (which also shows the published approximation, for comparison); contributions of each disease (closed-form Shapley values) in `attribute_burden()` and `contribution_table()`; the attributable risk of event impacts.
+- **Inputs:** `cm_read_inputs()` reads CSV files or data frames (each table a named argument) and reports every problem at once (`cm_check_inputs()`); uncertain values carry their distribution in their own row (`dist`, `p1`-`p4`), mixed freely with point values. `cm_template()` writes example files, and `system.file("extdata", "five_diseases", package = "deconflate")` holds a five-disease example that uses every feature, with a script (`run_all_features.R`) that runs them all. In R: `cm_diseases()`, `cm_associations()` (OR, RR, RD, phi, prevalence, OR ratio; about pairs, combinations and subgroups, crude or adjusted), `cm_population()`, `cm_impacts()` and `cm_model()`.
+- **Adjustment:** `deconflate()` for additive and event impacts, with interactions, several rows per item (pooling with random or fixed effects, weighted least squares; `$heterogeneity`), and intervals (`n_draws`); `compare_methods()` (which also shows the published approximation, for comparison); contributions of each disease (closed-form Shapley values) in `attribute_burden()` and `contribution_table()`; the attributable risk of event impacts.
 - **Joint distribution and feasibility:** `fit_joint()` (exact, or sampled for many diseases), `combination_probs()` and `check_feasibility()`.
 - **Attribution of non-additive losses:** `shapley_by_cell()`.
 - **Sensitivity and thresholds:** `cm_threshold()` (where a ranking, a sign or the aggregate changes as one input varies), `sensitivity_oat()`, `screen_associations()`, `screen_interactions()` and `screen_three_way()`; they also run without any association estimates, to show which associations would matter.

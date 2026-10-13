@@ -1,8 +1,10 @@
 #' Contribution table
 #'
-#' One row per disease with the raw estimate, the adjusted value and the
-#' disease's contribution to the total, with 95% intervals when the result
-#' has draws.
+#' One row per disease with the raw estimate (of its row, when it has
+#' exactly one), the adjusted value and the disease's contribution to the
+#' total, with 95% intervals when the result has draws. Interactions are in
+#' the result's `adjusted` table; their contributions are shared among their
+#' diseases here.
 #'
 #' * Additive impacts: the contribution to the aggregate (its Shapley share,
 #'   including any interaction share), in the units of the impacts.
@@ -19,11 +21,13 @@ contribution_table <- function(result) {
   if (inherits(result, "cm_event_result")) {
     a <- result$adjusted
     by <- result$attributable$by_disease
-    out <- data.frame(disease = a$disease, measure = a$measure, raw = a$raw,
-                      adjusted_hr = a$adjusted, stringsAsFactors = FALSE)
+    ids <- if (!is.null(by)) by$disease else a$disease[a$kind == "disease"]
+    k <- match(ids, a$disease)
+    out <- data.frame(disease = ids, measure = a$measure[k], raw = a$raw[k],
+                      adjusted_hr = a$adjusted[k], stringsAsFactors = FALSE)
     if (!is.null(a$lower)) {
-      out$adjusted_lower <- a$lower
-      out$adjusted_upper <- a$upper
+      out$adjusted_lower <- a$lower[k]
+      out$adjusted_upper <- a$upper[k]
     }
     if (!is.null(by)) {
       out$attributable <- by$attributable
@@ -38,12 +42,13 @@ contribution_table <- function(result) {
   if (!inherits(result, "cm_result")) cm_abort("`result` must come from deconflate().")
   a <- result$adjusted
   ct <- result$contributions
-  out <- data.frame(disease = a$disease, raw = a$raw, adjusted = a$adjusted, change = a$change,
+  k <- match(ct$disease, a$disease)
+  out <- data.frame(disease = ct$disease, raw = a$raw[k], adjusted = a$adjusted[k], change = a$change[k],
                     contribution = ct$total, main = ct$main, interaction = ct$interaction,
                     share = ct$share, stringsAsFactors = FALSE)
   if (!is.null(a$lower)) {
-    out$adjusted_lower <- a$lower
-    out$adjusted_upper <- a$upper
+    out$adjusted_lower <- a$lower[k]
+    out$adjusted_upper <- a$upper[k]
     out$contribution_lower <- ct$lower
     out$contribution_upper <- ct$upper
   }
@@ -90,7 +95,7 @@ summary.cm_event_result <- function(object, ...) {
 print.summary.cm_result <- function(x, ...) {
   lab <- if (!is.null(x$label)) sprintf(" - %s", x$label) else ""
   un <- if (!is.null(x$units) && !is.na(x$units)) sprintf(" [%s]", x$units) else ""
-  cat(sprintf("Comorbidity adjustment (method: %s)%s%s\n\n", x$method, lab, un))
+  cat(sprintf("Comorbidity adjustment (%s)%s%s\n\n", x$method, lab, un))
   print(x$totals, row.names = FALSE, digits = 4)
   cat("\n")
   print(x$contributions, row.names = FALSE, digits = 4)

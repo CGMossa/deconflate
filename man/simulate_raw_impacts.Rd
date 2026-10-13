@@ -8,11 +8,12 @@ simulate_raw_impacts(
   model,
   true_impacts,
   interactions = NULL,
-  estimand = "crude",
+  rows = NULL,
   adjusted_for = NA_character_,
   n = NULL,
   joint = NULL,
-  units = NULL
+  units = NULL,
+  ...
 )
 }
 \arguments{
@@ -21,14 +22,15 @@ simulate_raw_impacts(
 \item{true_impacts}{Named numeric vector of true impacts, one per disease
 (any units).}
 
-\item{interactions}{Optional \code{\link[=cm_interactions]{cm_interactions()}} with true interaction
-values (same units).}
+\item{interactions}{Optional named numeric vector of true interactions,
+named by combination (e.g. \code{c("d1;d2" = 0.5)}), in the same units.}
 
-\item{estimand}{\code{"crude"} or \code{"adjusted_linear"}, one per disease or
-recycled.}
+\item{rows}{Optional data frame of the rows to simulate, with column
+\code{disease} and optional \code{among} and \code{adjusted_for}. Default: one row per
+disease (with \code{adjusted_for}) and one crude row per interaction.}
 
-\item{adjusted_for}{For \code{"adjusted_linear"}: adjustment sets (ids
-separated by \code{";"}, or \code{"all"}), one per disease or recycled.}
+\item{adjusted_for}{For the default rows: adjustment sets (ids separated
+by \code{";"}, or \code{"all"}), one per disease or recycled.}
 
 \item{n}{Optional number of animals to sample.}
 
@@ -37,6 +39,8 @@ model and have converged; a joint fitted here that does not converge
 stops with class \code{deconflate_nonconvergence}.}
 
 \item{units}{Optional units label for the returned impacts.}
+
+\item{...}{Not used (arguments of earlier versions give a message).}
 }
 \value{
 A \code{\link[=cm_impacts]{cm_impacts()}} object with the simulated raw impacts.
@@ -45,18 +49,20 @@ A \code{\link[=cm_impacts]{cm_impacts()}} object with the simulated raw impacts.
 For validation: given a population whose disease combinations follow the
 maximum-entropy distribution of \code{model} (see \code{\link[=fit_joint]{fit_joint()}}), and known true
 additive impacts (and optional interactions), computes what a study would
-estimate for each disease: the crude difference between animals with and
-without the disease, or the coefficient of an additive regression adjusted
-for other diseases. With \code{n = NULL} the exact population values are
-returned; with \code{n} set, \code{n} animals are sampled, which adds sampling error.
+estimate for each impact row: the crude difference between the two groups
+the row compares, or the regression coefficient of an adjusted row (see
+\code{\link[=cm_impacts]{cm_impacts()}} for what a row means). With \code{n = NULL} the exact
+population values are returned; with \code{n} set, \code{n} animals are sampled,
+which adds sampling error.
 }
 \details{
-Adjusting the returned raw impacts with \code{\link[=deconflate]{deconflate()}} should recover
-\code{true_impacts} exactly (for \code{n = NULL}): with the simultaneous or global
-method without interactions, and with the global method with them.
+Adjusting the returned raw impacts with \code{\link[=deconflate]{deconflate()}} recovers
+\code{true_impacts} and \code{interactions} exactly (for \code{n = NULL}), whenever the
+rows determine them.
 }
 \examples{
-raw <- simulate_raw_impacts(example_supplement(), c(d1 = 2, d2 = 4, d3 = 6))
-raw$value
-deconflate(cm_model(example_supplement(), raw))$adjusted$adjusted
+raw <- simulate_raw_impacts(example_supplement(), c(d1 = 2, d2 = 4, d3 = 6),
+                            interactions = c("d1;d2" = 1))
+raw
+deconflate(cm_model(example_supplement(), raw))$adjusted
 }

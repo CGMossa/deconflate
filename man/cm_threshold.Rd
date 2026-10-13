@@ -12,7 +12,6 @@ cm_threshold(
   target = NULL,
   diseases = NULL,
   by = c("contribution", "adjusted"),
-  method = "auto",
   event_model = FALSE,
   overall_risk = NULL,
   n_grid = 101L,
@@ -24,13 +23,15 @@ cm_threshold(
 \arguments{
 \item{model}{A \code{\link[=cm_model]{cm_model()}}.}
 
-\item{input}{The input to vary, keyed as in \code{\link[=cm_model]{cm_model()}}
-(\code{distributions}): \code{"assoc:<d1>:<d2>"} (the pair's association, on its
-measure; a pair without an association is varied as an odds ratio, so
-unknown pairs can be explored), \code{"inter:<d1>:<d2>"} (an interaction),
-\code{"prob:<disease>"} (the disease's \code{value}, on the scale it was entered),
-\code{"impact:<disease>"} (a raw impact), \code{"three:<d1>:<d2>:<d3>"} (a
-three-way ratio), or, for event impacts, \code{"risk"} (the overall risk).}
+\item{input}{The input to vary: \code{"assoc:<d1>:<d2>"} (the pair's crude
+pair row, on its measure; a pair without one is varied as an odds
+ratio, so unknown pairs can be explored), \code{"inter:<d1>:<d2>"} (an
+interaction, see \code{\link[=set_interaction]{set_interaction()}}), \code{"prob:<disease>"} (the disease's
+\code{value}, on the scale it was entered), \code{"impact:<disease>"} (the impact
+row of a disease, when it has one), \code{"three:<d1>:<d2>:<d3>"} (an
+OR_ratio, see \code{\link[=set_three_way]{set_three_way()}}), \code{"associations:<row>"} or
+\code{"impacts:<row>"} (any row, by its number), or, for event impacts,
+\code{"risk"} (the overall risk).}
 
 \item{range}{Two numbers: the range of the input to search.}
 
@@ -45,8 +46,8 @@ them) and \code{"sign"}.}
 
 \item{by}{For \code{"rank"}: \code{"contribution"} (default) or \code{"adjusted"}.}
 
-\item{method, event_model, overall_risk}{As in \code{\link[=deconflate]{deconflate()}} (a
-distribution of the overall risk is used at its mean).}
+\item{event_model, overall_risk}{As in \code{\link[=deconflate]{deconflate()}} (a distribution of
+the overall risk is used at its mean).}
 
 \item{n_grid}{Number of grid points.}
 
@@ -70,7 +71,8 @@ bracket), \code{scan} (each grid point with its status, the aggregate and the
 condition number), \code{regions} (stretches of unusable grid points),
 \code{summary} (per item: number of thresholds, and whether part of the range
 could not be evaluated), and the settings (\code{input}, \code{range}, \code{baseline}
-value of the input, \code{method}, \code{conclusion}, \code{target}, \code{fixed}).
+value of the input, \code{method} (the computations used), \code{conclusion},
+\code{target}, \code{fixed}).
 }
 \description{
 Varies one input over a range, with everything else fixed at the model's
@@ -119,11 +121,11 @@ crossing found" can be told apart from "part of the range could not be
 evaluated". A sign change between usable points separated by unusable
 ones is not reported as a crossing; such stretches appear in \code{regions}.
 
-Each point is adjusted as \code{\link[=deconflate]{deconflate()}} would (point estimates; the
-method is chosen for the point's own inputs). When the input is an
-impact, an interaction or the overall risk (which do not change the joint
-distribution) and the adjustment uses the joint distribution, it is
-fitted once and reused (or the \code{joint} passed through \code{...} is used).
+Each point is adjusted as \code{\link[=deconflate]{deconflate()}} would (point estimates). When
+the input is an impact row, an interaction or the overall risk (which do
+not change the joint distribution) and the adjustment uses the joint
+distribution, it is fitted once and reused (or the \code{joint} passed through
+\code{...} is used).
 
 Thresholds are deterministic: they are for the model's input values.
 }

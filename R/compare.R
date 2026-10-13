@@ -1,29 +1,24 @@
-#' Compare adjustment methods
+#' Compare the model with the published approximation
 #'
-#' Runs several adjustment methods on the same inputs and tabulates the
-#' results side by side. For additive impacts:
-#' * `"simultaneous"`: the exact solution from the pairwise tables;
-#' * `"global"`: the exact solution from the maximum-entropy distribution of
-#'   disease combinations, which also handles interactions, three-way terms
-#'   and unknown pairs;
+#' Runs the package's model and the earlier approximations on the same inputs
+#' and tabulates the results side by side. For additive impacts:
+#' * `"deconflate"`: the model of [deconflate()];
 #' * `"published"`: the proportional approximation used in Rasmussen et al.
-#'   (2022, 2024) (eq. 16 of the 2022 paper). It is not a method of
-#'   [deconflate()]; it is kept here (and in the `reproduce_*()` functions)
-#'   to compare earlier results with the exact solution. It applies to crude
-#'   estimates only, can mask incompatible inputs, and is undefined when its
-#'   denominator is zero.
+#'   (2022, 2024) (eq. 16 of the 2022 paper). It is not part of the model;
+#'   it is kept here (and in the `reproduce_*()` functions) to compare
+#'   earlier results with the exact solution. It needs one crude row per
+#'   disease and a crude pair row for every pair, can mask incompatible
+#'   inputs, and is undefined when its denominator is zero.
 #'
-#' For event impacts (`event_model = TRUE`): `"snapshot"` (the model of
-#' [deconflate()]), `"first_order"` (its log-linear approximation, from the
-#' pairwise tables) and `"published"` (the approach of Rasmussen et al.
-#' 2024: `HR - 1` adjusted with eq. 16), each with the attributable risk at
-#' `overall_risk`. The first-order and published methods need hazard (or
-#' rate) ratios.
+#' For event impacts (`event_model = TRUE`): `"deconflate"` (the snapshot
+#' model of [deconflate()]), `"first_order"` (its log-linear approximation,
+#' from the pairwise tables) and `"published"` (the approach of Rasmussen et
+#' al. 2024: `HR - 1` adjusted with eq. 16), each with the attributable risk
+#' at `overall_risk`. The first-order and published methods need one hazard
+#' (or rate) ratio per disease and every pair.
 #'
-#' Methods run exactly as asked (there is no automatic switch): methods that
-#' cannot be run (e.g. a pairwise method with unknown pairs, or the published
-#' approximation for adjusted estimands) are reported with the reason, and
-#' results with non-finite values are kept apart in `undefined`.
+#' Methods that cannot be run on the inputs are reported with the reason,
+#' and results with non-finite values are kept apart in `undefined`.
 #'
 #' With `n_draws`, the methods are also applied to the same draws of the
 #' uncertain inputs (a draw is rejected if any method fails on it), and the
@@ -34,7 +29,7 @@
 #' @param event_model,overall_risk As in [deconflate()].
 #' @param n_draws Number of draws (default 0: point estimates only).
 #' @param seed Optional random seed for the draws.
-#' @param ... Passed to the adjustment (e.g. `joint`, `feasibility`, or
+#' @param ... Passed to [deconflate()]'s model (e.g. `joint`, `pool`, or
 #'   arguments of [fit_joint()]).
 #' @return A `cm_comparison` object with `impacts` (raw and adjusted values,
 #'   one column per method), `change` (relative change from raw), `long`
@@ -49,26 +44,29 @@
 compare_methods <- function(model, methods = NULL, event_model = FALSE, overall_risk = NULL,
                             n_draws = 0, seed = NULL, ...) {
   check_model(model)
+  retired_args(list(...))
   check_event_model(model, event_model)
   risk <- check_overall_risk(overall_risk, event_model)
-  all_m <- if (event_model) c("published", "first_order", "snapshot") else c("published", "simultaneous", "global")
+  all_m <- if (event_model) c("published", "first_order", "deconflate") else c("published", "deconflate")
   methods <- unique(match.arg(methods %||% all_m, all_m, several.ok = TRUE))
   check_draw_args(n_draws, seed)
-  # As in deconflate(): beyond 20 diseases the joint distribution is fitted
-  # with the sampled backend (unless a backend or a joint is given).
-  auto_args <- if (nrow(model$diseases) > 20L && is.null(list(...)$backend) && is.null(list(...)$joint)) {
-    list(backend = "sampled", seed = seed)
-  } else list()
-  run_m <- function(mod, m, r, ...) {
-    args <- utils::modifyList(auto_args, list(...))
-    if (event_model) do.call(adjust_event, c(list(mod, method = m, overall_risk = r, warn = FALSE), args)) else
-      do.call(adjust_impacts, c(list(mod, method = m, warn = FALSE), args))
+  dots <- list(...)
+  pool <- dots$pool %||% "random"
+  dots$pool <- NULL
+  plan <- plan_model(model, event_model, dots, has_joint = !is.null(dots$joint), pool = pool)
+  if (!is.null(seed) && identical(plan$fit_args$backend, "sampled")) plan$fit_args$seed <- seed
+  run_m <- function(mod, m, r, central = TRUE, joint = dots$joint, frozen_a = NULL) {
+    switch(m,
+      deconflate = run_point(mod, plan, risk = r, joint = joint, warn = FALSE, dots = dots, central = central),
+      published = if (event_model) adjust_event_pairwise(mod, "published", r, pool = pool, frozen = frozen_a) else
+        adjust_published(mod, pool = pool, frozen = frozen_a),
+      first_order = adjust_event_pairwise(mod, "first_order", r, pool = pool, frozen = frozen_a))
   }
   res <- list()
   undefined <- list()
   failed <- character(0)
   for (m in methods) {
-    r <- tryCatch(withCallingHandlers(run_m(model, m, risk$value, ...),
+    r <- tryCatch(withCallingHandlers(run_m(model, m, risk$value),
                                       deconflate_nonconvergence = function(w) {
                                         if (inherits(w, "warning")) invokeRestart("muffleWarning")
                                       }),
@@ -87,22 +85,26 @@ compare_methods <- function(model, methods = NULL, event_model = FALSE, overall_
     cm_abort(sprintf("All methods failed: %s", paste(names(failed), failed, sep = ": ", collapse = "; ")))
   }
   ok <- names(res)
-  base <- res[[1]]$adjusted
+  # One row per term of the model's result (diseases first).
+  base <- (res$deconflate %||% res[[1]])$adjusted
   impacts <- base[, c("disease", "raw")]
   if (event_model) impacts <- base[, c("disease", "measure", "raw")]
   change <- impacts
   for (m in ok) {
-    impacts[[m]] <- res[[m]]$adjusted$adjusted
-    change[[m]] <- res[[m]]$adjusted$change
+    a <- res[[m]]$adjusted
+    k <- match(impacts$disease, a$disease)
+    impacts[[m]] <- a$adjusted[k]
+    change[[m]] <- a$change[k]
   }
   long <- do.call(rbind, lapply(ok, function(m) {
     a <- res[[m]]$adjusted
-    contrib <- if (event_model) res[[m]]$attributable$by_disease$attributable else res[[m]]$contributions$total
-    raw_dir <- if (event_model) sign(event_scale(a$raw, a$measure)) else sign(a$raw)
+    by <- if (event_model) res[[m]]$attributable$by_disease else res[[m]]$contributions
+    contrib <- if (is.null(by)) NA_real_ else by[[if (event_model) "attributable" else "total"]][match(a$disease, by$disease)]
+    raw_dir <- if (event_model) sign(event_scale(a$raw, ifelse(is.na(a$measure), "HR", a$measure))) else sign(a$raw)
     adj_dir <- if (event_model) sign(log(pmax(a$adjusted, 1e-300))) else sign(a$adjusted)
     data.frame(disease = a$disease, method = m, raw = a$raw, adjusted = a$adjusted,
-               change = a$change, contribution = contrib %||% NA_real_,
-               sign_change = is.finite(a$adjusted) & raw_dir != 0 & adj_dir != 0 & adj_dir != raw_dir,
+               change = a$change, contribution = contrib,
+               sign_change = is.finite(a$adjusted) & !is.na(raw_dir) & raw_dir != 0 & adj_dir != 0 & adj_dir != raw_dir,
                stringsAsFactors = FALSE)
   }))
   totals <- do.call(rbind, lapply(ok, function(m) {
@@ -116,7 +118,12 @@ compare_methods <- function(model, methods = NULL, event_model = FALSE, overall_
                  stringsAsFactors = FALSE)
     }
   }))
-  diagnostics <- do.call(rbind, lapply(ok, function(m) res[[m]]$diagnostics))
+  diagnostics <- do.call(rbind, lapply(ok, function(m) {
+    d <- res[[m]]$diagnostics
+    d$rank <- d$rank %||% NA_real_
+    d[, c("method", "max_reconstruction_residual", "condition_number", "n_sign_changes", "sign_changes", "feasibility")]
+  }))
+  diagnostics$method <- ok
   rownames(totals) <- NULL
   rownames(diagnostics) <- NULL
   out <- structure(list(impacts = impacts, change = change, long = long, totals = totals,
@@ -124,13 +131,17 @@ compare_methods <- function(model, methods = NULL, event_model = FALSE, overall_
                         event_model = event_model, units = res[[1]]$units, label = res[[1]]$label,
                         results = res, undefined = undefined, draws = NULL),
                    class = "cm_comparison")
-  specs <- draw_specs(model, risk$dist)
+  frozen_pool <- res$deconflate$pooling$frozen
+  specs <- draw_specs(model, risk$dist, frozen_pool)
   if (n_draws > 0 && length(specs)) {
-    dots <- list(...)
-    dots$joint <- NULL   # each draw has its own joint distribution
+    central <- res$deconflate
+    frozen <- if (!is.null(central)) list(associations = central$pooling$frozen, impacts = central$row_se)
     evaluate <- function(m2, r) {
       q <- lapply(ok, function(m) {
-        rr <- do.call(run_m, c(list(m2, m, r %||% risk$value), dots))
+        rr <- if (m == "deconflate") {
+          run_point(m2, plan, risk = r %||% risk$value, joint = NULL, warn = FALSE, dots = dots,
+                    joint_start = if (identical(central$joint$backend, "exact")) central$joint, frozen = frozen)
+        } else run_m(m2, m, r %||% risk$value, central = FALSE, joint = NULL, frozen_a = frozen$associations)
         if (!result_is_finite(rr)) {
           cm_abort(sprintf("Non-finite adjusted values (method %s).", m), class = "deconflate_nonfinite")
         }

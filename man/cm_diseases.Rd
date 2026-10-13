@@ -5,22 +5,25 @@
 \title{Describe the diseases in a system}
 \usage{
 cm_diseases(
-  id,
+  disease,
   value,
-  type = "prevalence",
+  measure = "prevalence",
+  label = NA_character_,
   time_horizon = NA_character_,
   reference_population = NA_character_,
-  source = NA_character_
+  source = NA_character_,
+  note = NA_character_,
+  ...
 )
 }
 \arguments{
-\item{id}{Character vector of unique disease identifiers (no \code{|}, \verb{;} or
-\code{:}; \code{"all"} is reserved).}
+\item{disease}{Character vector of unique disease ids (no \code{|}, \verb{;} or
+\code{:}; \code{"all"} and \code{"others"} are reserved).}
 
-\item{value}{Numeric vector of disease occurrence values. Interpreted
-according to \code{type}.}
+\item{value}{Numeric vector of disease occurrence values, interpreted
+according to \code{measure}.}
 
-\item{type}{Character, one per disease (or recycled):
+\item{measure}{Character, one per disease (or recycled):
 \itemize{
 \item \code{"prevalence"}: proportion of animals affected at a representative
 point in time (used as the probability directly).
@@ -32,6 +35,8 @@ to a probability assuming Poisson-distributed events,
 \code{1 - exp(-value)}, as in Rasmussen et al. (2024), eq. 1.
 }}
 
+\item{label}{Optional full names of the diseases (e.g. \code{"lameness"}).}
+
 \item{time_horizon}{Character label of the period the probabilities refer
 to (e.g. \code{"lactation"}, \code{"year"}). Probabilities, associations and impacts
 should all refer to the same period.}
@@ -39,17 +44,22 @@ should all refer to the same period.}
 \item{reference_population}{Optional description of the population the
 values come from.}
 
-\item{source}{Optional citation.}
+\item{source, note}{Optional citation and free-text note.}
+
+\item{...}{Not used (arguments of earlier versions give a message).}
 }
 \value{
 A \code{cm_diseases} data frame with the converted probability in
-column \code{prob} and the inputs retained as metadata.
+column \code{prob} and the inputs retained.
 }
 \description{
-Describe the diseases in a system
+One row per disease: how common it is in the whole population. Rows about
+two or more diseases (associations, combinations, prevalences within
+subgroups) belong in \code{\link[=cm_associations]{cm_associations()}}.
 }
 \examples{
 cm_diseases(c("SCK", "PTB"), c(0.4789, 0.1001),
-            type = c("incidence_rate", "prevalence"),
+            measure = c("incidence_rate", "prevalence"),
+            label = c("subclinical ketosis", "paratuberculosis"),
             time_horizon = "lactation")
 }

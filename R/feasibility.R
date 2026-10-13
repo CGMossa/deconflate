@@ -2,8 +2,10 @@
 #'
 #' Each pairwise 2x2 table can be valid on its own while no distribution of
 #' disease combinations satisfies all of them together. This function checks
-#' joint feasibility before fitting the global model, and points to the
-#' pairs that conflict.
+#' the pairwise tables (from the crude pair rows, pooled where a pair has
+#' several) and points to the pairs that conflict. Rows about combinations
+#' or subgroups are checked by fitting the joint distribution, which
+#' [deconflate()] does for the central estimate (up to 20 diseases).
 #'
 #' Two checks are available:
 #' * `"triples"`: for every triple of diseases whose three pairs are all
@@ -42,7 +44,7 @@ check_feasibility <- function(model, method = c("auto", "triples", "lp"),
                               max_lp_diseases = 14L, tol = 1e-9) {
   check_population(model)
   method <- match.arg(method)
-  ids <- model$diseases$id
+  ids <- model$diseases$disease
   P <- stats::setNames(model$diseases$prob, ids)
   pt <- pair_tables(model)
   triples <- triple_screen(pt, P, tol)

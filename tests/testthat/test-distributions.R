@@ -134,35 +134,45 @@ test_that("a model's distributions are keyed by its inputs", {
                 distributions = list("impact:d1" = dist_normal(2.5, 0.5),
                                      "assoc:d3:d2" = dist_lognormal_ci(3, 2, 4.5),
                                      "prob:d1" = dist_beta(10, 90)))
-  # Keys are put in canonical form (associations as listed in their table).
-  expect_setequal(names(d$distributions), c("impact:d1", "assoc:d2:d3", "prob:d1"))
+  # Keys are put in canonical form: the table and row of each row.
+  expect_setequal(names(d$distributions), c("impacts:1", "associations:3", "prob:d1"))
   expect_true(all(vapply(d$distributions, inherits, logical(1), "cm_dist")))
   expect_output(print(d), "Uncertain inputs \\(with a distribution\\): 3")
   expect_null(m$distributions)
+  # Row keys can be given directly.
+  d1 <- cm_model(m, m$impacts, distributions = list("impacts:1" = dist_normal(2.5, 0.5),
+                                                    "associations:3" = dist_lognormal_ci(3, 2, 4.5)))
+  expect_setequal(names(d1$distributions), c("impacts:1", "associations:3"))
   bad <- function(dists) cm_model(m, m$impacts, distributions = dists)
   expect_error(bad(list(dist_normal(0, 1))), "named list")
   expect_error(bad(list("impact:d1" = 1)), "named list")
   expect_error(bad(list("impact:d1" = dist_fixed(1), "impact:d1" = dist_fixed(2))), "more than once")
   expect_error(bad(list("assoc:d2:d3" = dist_fixed(3), "assoc:d3:d2" = dist_fixed(3))), "more than once")
+  expect_error(bad(list("assoc:d2:d3" = dist_fixed(3), "associations:3" = dist_fixed(3))), "more than once")
   expect_error(bad(list("assoc:d1" = dist_fixed(1))), "assoc:<d1>:<d2>")
-  expect_error(bad(list("inter:d1:d2" = dist_fixed(1))), "no interaction")
-  expect_error(bad(list("three:d1:d2:d3" = dist_fixed(1))), "no three-way terms")
+  expect_error(bad(list("inter:d1:d2" = dist_fixed(1))), "no impact row matches")
+  expect_error(bad(list("three:d1:d2:d3" = dist_fixed(1))), "no association row matches")
+  expect_error(bad(list("impacts:9" = dist_fixed(1))), "no impact row 9")
   expect_error(bad(list("prob:zz" = dist_fixed(0.1))), "unknown disease")
   expect_error(bad(list("foo:d1" = dist_fixed(1))), "unknown input type")
   # A pair without an association has no association to be uncertain about.
   m2 <- m
   m2$associations <- m$associations[-2, ]
   expect_error(cm_model(m2, m2$impacts, distributions = list("assoc:d1:d3" = dist_fixed(1))),
-               "no association row")
-  # Interactions and three-way terms are keyed in their tables' order.
-  mi <- cm_model(cm_population(m$diseases, m$associations, cm_three_way("d3", "d1", "d2", 2)),
-                 m$impacts, cm_interactions("d2", "d1", 0.5),
-                 distributions = list("inter:d1:d2" = dist_normal(0.5, 0.1),
-                                      "three:d1:d2:d3" = dist_lognormal(log(2), 0.3)))
-  expect_setequal(names(mi$distributions), c("inter:d2:d1", "three:d3:d1:d2"))
+               "no association row matches")
+  # A key that names several rows asks for the row.
+  m3 <- cm_model(supp_population(cm_associations("d2", "d3", 2.5)), m$impacts)
+  expect_error(cm_model(m3, m3$impacts, distributions = list("assoc:d2:d3" = dist_fixed(3))),
+               "2 association rows match \\(rows 3, 4\\)")
+  # Interactions and three-way associations are rows of their tables.
+  mi <- supp_model(c(2.5, 5, 7.5), interactions = c("d1;d2" = 0.5),
+                   population = supp_population(cm_associations("d3", "d1", 2, measure = "OR_ratio", among = "d2")))
+  mi <- cm_model(mi, mi$impacts, distributions = list("inter:d2:d1" = dist_normal(0.5, 0.1),
+                                                      "three:d1:d2:d3" = dist_lognormal(log(2), 0.3)))
+  expect_setequal(names(mi$distributions), c("impacts:4", "associations:4"))
   # Setting an association to a scenario value drops its distribution.
   d2 <- set_association(d, "d2", "d3", 1.5)
-  expect_setequal(names(d2$distributions), c("impact:d1", "prob:d1"))
+  expect_setequal(names(d2$distributions), c("impacts:1", "prob:d1"))
 })
 
 test_that("the overall risk can be a distribution within (0, 1), used at its mean", {

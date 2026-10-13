@@ -11,9 +11,9 @@ independent_pairs <- function(m) cm_model(with_independent_pairs(as_population(m
 test_that("incidence is converted with 1 - exp(-I)", {
   m <- example_global_dairy(inputs = "tables")
   d <- m$diseases
-  expect_equal(d$prob[d$id == "SCK"], 1 - exp(-0.4789))
-  expect_equal(d$prob[d$id == "PTB"], 0.1001)
-  expect_equal(d$id, ids)
+  expect_equal(d$prob[d$disease == "SCK"], 1 - exp(-0.4789))
+  expect_equal(d$prob[d$disease == "PTB"], 0.1001)
+  expect_equal(d$disease, ids)
   expect_equal(nrow(m$associations), 38)
   expect_equal(attr(m$impacts, "units"), "% decrease")
   expect_equal(attr(example_global_dairy("fertility", inputs = "tables")$impacts, "label"),
@@ -21,11 +21,10 @@ test_that("incidence is converted with 1 - exp(-I)", {
 })
 
 test_that("published approximation at the means (Tables 2-4) matches the reference", {
-  # The published approximation is internal (adjust_impacts()); it is not a
-  # method of deconflate().
-  y <- adjust_impacts(independent_pairs(example_global_dairy(inputs = "tables")), method = "published")
-  f <- adjust_impacts(independent_pairs(example_global_dairy("fertility", inputs = "tables")),
-                      method = "published")
+  # The published approximation is internal (adjust_published()); it is not
+  # part of deconflate().
+  y <- adjust_published(independent_pairs(example_global_dairy(inputs = "tables")))
+  f <- adjust_published(independent_pairs(example_global_dairy("fertility", inputs = "tables")))
   expect_equal(y$adjusted$disease, ids)
   expect_equal(y$adjusted$adjusted,
                c(0.024548, 1.345727, 0.793385, 3.57018, 2.539522, 2.838661,
@@ -38,12 +37,12 @@ test_that("published approximation at the means (Tables 2-4) matches the referen
   expect_equal(y$units, "% decrease")
 })
 
-test_that("with unlisted pairs independent, the simultaneous solution flags sign changes the published method hides", {
+test_that("with unlisted pairs independent, the exact solution flags sign changes the published method hides", {
   m <- independent_pairs(example_global_dairy(inputs = "tables"))
   w <- capture_warnings(res <- deconflate(m, n_draws = 0))
   expect_length(w, 1)
   expect_match(w[1], "CK, CM, DA, MF")
-  expect_equal(res$method, "simultaneous")
+  expect_equal(res$method, "pairwise shortcut")
   expect_length(res$notes, 0)
   expect_equal(res$adjusted$adjusted,
                c(-5.363694, -0.249627, -2.672514, 4.313586, 1.987313, 2.774729,
@@ -52,7 +51,7 @@ test_that("with unlisted pairs independent, the simultaneous solution flags sign
   expect_equal(res$diagnostics$n_sign_changes, 4)
   expect_equal(res$diagnostics$sign_changes, "CK, CM, DA, MF")
   # The aggregate burden is similar across methods.
-  pub <- adjust_impacts(m, method = "published", warn = FALSE)
+  pub <- adjust_published(m)
   expect_equal(pub$totals$adjusted_total, 6.855, tolerance = 1e-3)
   expect_equal(res$totals$adjusted_total, 7.015, tolerance = 1e-3)
 })
@@ -76,7 +75,7 @@ test_that("analysis inputs use the fixed de-conflation probabilities", {
                  0.3806298397, 0.4094148319),
                tolerance = 1e-8)
   # SCM was entered without converting incidence to a probability.
-  expect_equal(d$type[d$id == "SCM"], "probability")
+  expect_equal(d$measure[d$disease == "SCM"], "probability")
   # The analyses gave every unlisted pair an odds ratio of 1.
   expect_equal(sum(pair_tables(gd$yield)$status == "unknown"), 0)
   cu <- gd$culling_hr_minus_1$impacts
@@ -88,7 +87,7 @@ test_that("analysis inputs use the fixed de-conflation probabilities", {
 
 test_that("published approximation at the analysis central values matches the reference", {
   gd <- global_dairy_analyses("analysis", culling = TRUE)
-  res <- lapply(gd, adjust_impacts, method = "published")
+  res <- lapply(gd, adjust_published)
   expect_equal(res$yield$adjusted$adjusted,
                c(0.024732965, 1.3319499, 0.79378291, 3.568819, 2.5324074,
                  2.8409515, 0.068975316, 2.6385934, 3.2291707, 2.2577111,
@@ -107,18 +106,18 @@ test_that("published approximation at the analysis central values matches the re
                tolerance = 1e-6)
   # The same numbers as the published method of the event model
   # (internal adjust_event()).
-  hr <- adjust_event(independent_pairs(example_global_dairy("culling")), method = "published",
-                     overall_risk = 0.2366)
+  hr <- adjust_event_pairwise(independent_pairs(example_global_dairy("culling")), "published", 0.2366)
   expect_equal(hr$adjusted$adjusted, 1 + res$culling_hr_minus_1$adjusted$adjusted,
                tolerance = 1e-10)
 })
 
-test_that("simultaneous solution at the analysis central values", {
+test_that("exact solution at the analysis central values", {
   gd <- global_dairy_analyses("analysis", culling = TRUE)
   w <- capture_warnings(res <- lapply(gd, deconflate, n_draws = 0))
   expect_length(w, 3)
   expect_equal(vapply(res, function(r) r$method, character(1)),
-               c(yield = "simultaneous", fertility = "simultaneous", culling_hr_minus_1 = "simultaneous"))
+               c(yield = "pairwise shortcut", fertility = "pairwise shortcut",
+                 culling_hr_minus_1 = "pairwise shortcut"))
   expect_equal(vapply(res, function(r) r$diagnostics$sign_changes, character(1)),
                c(yield = "CK, CM, DA, MF", fertility = "CK, DA, LAM, SCK, SCM",
                  culling_hr_minus_1 = "CK, MET"))
@@ -129,14 +128,14 @@ test_that("simultaneous solution at the analysis central values", {
                tolerance = 1e-6)
 })
 
-test_that("by default the 28 unlisted pairs are unknown and the global method fills them in", {
+test_that("by default the 28 unlisted pairs are unknown and the model fills them in", {
   skip_on_cran()
   m <- example_global_dairy()
   expect_equal(sum(pair_tables(m)$status == "unknown"), 28)
   w <- capture_warnings(y <- deconflate(m, n_draws = 0))
   expect_length(w, 1)
-  expect_equal(y$method, "global")
-  expect_match(y$notes, "28 pairs without an association")
+  expect_equal(y$method, "full model")
+  expect_length(y$notes, 0)
   expect_equal(y$adjusted$adjusted,
                c(-5.030744, -0.139559, -2.61526, 3.98935, 2.05439, 2.382588, -2.210161,
                  2.680359, 3.121419, 2.144482, 7.886341, 5.949534), tolerance = 1e-5)

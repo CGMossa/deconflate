@@ -27,9 +27,9 @@ the analysis, so \code{\link[=deconflate]{deconflate()}} reports intervals (use 
 point estimates only).
 }
 \details{
-Pairs not in Table 3 are unknown, as for any input in this package, so
-\code{\link[=deconflate]{deconflate()}} uses the global method. The 2024 analysis treated them as
-independent; \code{\link[=reproduce_rasmussen_2024]{reproduce_rasmussen_2024()}} does the same.
+Pairs not in Table 3 are unknown, as for any input in this package: the
+model fills them in. The 2024 analysis treated them as independent;
+\code{\link[=reproduce_rasmussen_2024]{reproduce_rasmussen_2024()}} does the same.
 }
 \section{Two versions of the inputs}{
 
@@ -50,8 +50,8 @@ zero.
 
 \section{Culling}{
 
-\code{outcome = "culling"} gives the hazard ratios as event impacts (estimand
-\code{"snapshot_crude"}, an assumption), for
+\code{outcome = "culling"} gives the hazard ratios as event impacts (crude
+snapshot comparisons, an assumption), for
 \code{deconflate(..., event_model = TRUE, overall_risk = 0.2366)} (the global
 culling risk of the 2024 analysis). The 2024 analysis adjusted hazard
 ratios minus 1 as if they were additive impacts; that historical

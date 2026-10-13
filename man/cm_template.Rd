@@ -26,14 +26,12 @@ point values. The files are:
 \item \code{associations.csv}: their associations (odds ratios);
 \item \code{yield.csv}: additive impacts on milk yield, in percent of yield (any
 units can be used);
-\item \code{yield_interactions.csv}: an empty interactions table for the yield
-impacts (pairwise interactions in the same units);
 \item \code{culling.csv}: event impacts on culling (hazard ratios and a risk ratio),
-for \code{deconflate(..., event_model = TRUE, overall_risk = ...)};
-\item \code{three_way.csv}: an empty three-way table.
+for \code{deconflate(..., event_model = TRUE, overall_risk = ...)}.
 }
 
-The folder \code{system.file("extdata", "five_diseases", package = "deconflate")} has a fuller example that uses every feature.
+The folder \code{system.file("extdata", "five_diseases", package = "deconflate")} has a fuller example that uses every feature (several
+rows per item, subgroups, adjusted rows, combinations).
 }
 \examples{
 dir <- file.path(tempdir(), "my-inputs")

@@ -3,11 +3,7 @@
 # enumeration.
 
 t2_ids <- c("d1", "d2", "d3")
-t2_pop <- function(three_way = NULL) {
-  cm_population(cm_diseases(t2_ids, c(0.10, 0.15, 0.20)),
-                cm_associations(c("d1", "d1", "d2"), c("d2", "d3", "d3"), c(2, 1, 3)),
-                three_way = three_way)
-}
+t2_pop <- function(extra = NULL) supp_population(extra)
 t2_bad_pop <- function() {
   cm_population(cm_diseases(c("a", "b", "c"), c(0.5, 0.5, 0.5)),
                 cm_associations(c("a", "a", "b"), c("b", "c", "c"), c(20, 20, 0.05)))
@@ -34,20 +30,22 @@ test_that("a warm start gives the same fit", {
   expect_equal(warm$prob, cold$prob, tolerance = 1e-8)
   expect_lt(warm$max_residual, 1e-10)
   expect_equal(warm$targets, cold$targets)
-  # A start of another family is not used: different constrained pairs, a
-  # different three-way term, other diseases, or the sampled backend.
+  # A start of another family is not used: different association rows,
+  # other diseases, or the sampled backend.
   pop3 <- pop2
   pop3$associations <- pop3$associations[-2, ]
   expect_identical(fit_joint(pop3, start = j0)$prob, fit_joint(pop3)$prob)
   pop4 <- set_three_way(pop2, "d1", "d2", "d3", 2)
   expect_identical(fit_joint(pop4, start = j0)$prob, fit_joint(pop4)$prob)
-  expect_false(warm_start_ok(j0, c("d1", "d2", "x"), pair_tables(pop2), NULL))
+  st <- population_structure(pop2)
+  expect_false(warm_start_ok(j0, c("d1", "d2", "x"), st))
   js0 <- j0
   js0$backend <- "sampled"
-  expect_false(warm_start_ok(js0, t2_ids, pair_tables(pop2), NULL))
-  expect_false(warm_start_ok(NULL, t2_ids, pair_tables(pop2), NULL))
-  expect_true(warm_start_ok(j0, t2_ids, pair_tables(pop2), NULL))
-  # A start with the same three-way term is used.
+  expect_false(warm_start_ok(js0, t2_ids, st))
+  expect_false(warm_start_ok(NULL, t2_ids, st))
+  expect_true(warm_start_ok(j0, t2_ids, st))
+  expect_false(warm_start_ok(j0, t2_ids, population_structure(pop4)))
+  # A start with the same rows is used (also with an OR_ratio row).
   j4 <- fit_joint(pop4)
   pop5 <- set_association(pop4, "d2", "d3", 2.5)
   expect_equal(fit_joint(pop5, start = j4)$prob, fit_joint(pop5)$prob, tolerance = 1e-8)
@@ -80,22 +78,22 @@ test_that("the sampled backend matches the targets and the exact distribution (3
   expect_output(print(js), "sampled backend")
 })
 
-test_that("the global method gives the same answers with a sampled joint", {
+test_that("the model gives the same answers with a sampled joint", {
   pop <- t2_pop()
   js <- sampled(pop)
   # Without interactions the result depends on the (raked, exact) pairs only.
   m <- cm_model(pop, cm_impacts(t2_ids, c(2.5, 5, 7.5)))
-  expect_equal(deconflate(m, method = "global", joint = js)$adjusted$adjusted,
+  expect_equal(adjust_additive(m, joint = js)$adjusted$adjusted,
                deconflate(m)$adjusted$adjusted, tolerance = 1e-7)
+  expect_equal(deconflate(m, joint = js)$adjusted$adjusted, deconflate(m)$adjusted$adjusted)
   # With interactions it depends on triples: close to the exact result.
-  int <- cm_interactions(c("d1", "d2"), c("d2", "d3"), c(0.01, 0.015))
   raw <- c(0.027146191901, 0.061369036759, 0.071166773469)
-  mi <- cm_model(pop, cm_impacts(t2_ids, raw), int)
+  mi <- supp_model(raw, interactions = c("d1;d2" = 0.01, "d2;d3" = 0.015))
   rs <- deconflate(mi, joint = js)
-  expect_equal(rs$method, "global")
-  expect_equal(rs$adjusted$adjusted, c(0.02, 0.04, 0.06), tolerance = 0.02)
+  expect_equal(rs$method, "full model")
+  expect_equal(rs$adjusted$adjusted, c(0.02, 0.04, 0.06, 0.01, 0.015), tolerance = 0.02)
   # The event model works with a sampled joint too.
-  ev <- cm_model(pop, cm_impacts(t2_ids, c(1.5, 2.0, 1.3), measure = "HR", estimand = "snapshot_crude"))
+  ev <- cm_model(pop, cm_impacts(t2_ids, c(1.5, 2.0, 1.3), measure = "HR"))
   re <- deconflate(ev, event_model = TRUE, overall_risk = 0.25, joint = js, n_draws = 0)
   expect_equal(re$adjusted$adjusted, c(1.3831529713, 1.8909315489, 1.1439870467), tolerance = 0.01)
   expect_equal(sum(re$attributable$by_disease$attributable), re$attributable$summary$attributable,
@@ -113,7 +111,11 @@ test_that("without raking the sample residual is reported", {
 test_that("a sampled joint is validated against the model like an exact one", {
   js <- sampled(t2_pop())
   m2 <- set_association(example_supplement(), "d1", "d2", 3)
-  expect_error(deconflate(m2, method = "global", joint = js), class = "deconflate_error")
+  expect_error(deconflate(m2, joint = js), "association values", class = "deconflate_error")
+  # The sampled backend supports crude pair rows only.
+  m3 <- cm_model(t2_pop(cm_associations("d1", "d2", 2, measure = "OR_ratio", among = "d3")),
+                 cm_impacts(t2_ids, c(1, 2, 3)))
+  expect_error(sampled(m3), "crude pair rows only", class = "deconflate_unsupported")
 })
 
 test_that("an unresolved sampled fit is reported, not called infeasible", {
@@ -123,7 +125,8 @@ test_that("an unresolved sampled fit is reported, not called infeasible", {
                  class = "deconflate_nonconvergence")
   expect_false(js$converged)
   m <- cm_model(bad, cm_impacts(c("a", "b", "c"), c(1, 2, 3)))
-  expect_error(deconflate(m, method = "global", joint = js), class = "deconflate_nonconvergence")
+  expect_error(validate_joint(js, m), class = "deconflate_nonconvergence")
+  expect_error(deconflate(m, joint = js), class = "deconflate_error")
 })
 
 test_that("raking stops at once when no sampled combination can carry a target", {
@@ -145,19 +148,20 @@ test_that("more than 20 diseases use the sampled backend automatically", {
                        cm_associations(ids[-n], ids[-1], 2))
   m <- cm_model(pop, cm_impacts(ids, seq(1, 5, length.out = n)))
   expect_error(fit_joint(pop), "backend")
-  # Unknown pairs need the global method, here with the sampled backend.
-  plan <- plan_method(m, "auto", FALSE)
-  expect_equal(plan$method, "global")
+  # Unknown pairs need the full model, here with the sampled backend.
+  plan <- plan_model(m, FALSE)
+  expect_false(plan$shortcut)
   expect_equal(plan$fit_args$backend, "sampled")
   expect_match(plan$notes, "sampled backend", all = FALSE)
-  expect_match(plan$notes, "253 pairs without an association", all = FALSE)
   # An explicit backend is kept.
-  expect_null(plan_method(m, "auto", FALSE, dots = list(backend = "exact"))$fit_args$backend)
-  # With every pair given, the simultaneous method needs no joint at all.
+  expect_null(plan_model(m, FALSE, dots = list(backend = "exact"))$fit_args$backend)
+  # With every pair given, the pairwise shortcut needs no joint at all (the
+  # triple screen checks feasibility).
   mi <- cm_model(with_independent_pairs(pop), m$impacts)
-  pl <- plan_method(mi, "auto", FALSE)
-  expect_equal(pl$method, "simultaneous")
-  expect_length(pl$notes, 0)
+  pl <- plan_model(mi, FALSE)
+  expect_true(pl$shortcut)
+  expect_false(pl$confirm)
+  expect_match(pl$notes, "triple screen", all = FALSE)
 })
 
 test_that("the sampled backend handles more diseases than enumeration allows", {
@@ -170,7 +174,7 @@ test_that("the sampled backend handles more diseases than enumeration allows", {
   js <- fit_joint(pop, backend = "sampled", n_samples = 20000, n_chains = 500, seed = 3)
   expect_true(js$converged)
   m <- cm_model(pop, cm_impacts(ids, seq(1, 5, length.out = n)))
-  expect_equal(deconflate(m, method = "global", joint = js)$adjusted$adjusted,
+  expect_equal(adjust_additive(m, joint = js)$adjusted$adjusted,
                deconflate(m)$adjusted$adjusted, tolerance = 1e-6)
 })
 
@@ -183,12 +187,11 @@ test_that("sampled and exact backends agree for the 12-disease global dairy popu
   # Distribution of the number of diseases per cow.
   nd <- function(j) vapply(0:5, function(k) sum(j$prob[rowSums(j$cells) == k]), numeric(1))
   expect_lt(max(abs(nd(je) - nd(js))), 0.01)
-  # Global yield adjustment with one interaction.
-  y <- example_global_dairy("yield", inputs = "tables")
-  y$interactions <- cm_interactions("CM", "SCM", 1)
+  # Yield adjustment with one interaction.
+  y <- set_interaction(example_global_dairy("yield", inputs = "tables"), "CM", "SCM", 1)
   # The exact solution changes the sign of some global dairy yield impacts
   # (see vignette("reproducing-published")), so warnings are off.
-  re <- deconflate(y, method = "global", joint = je, warn = FALSE, n_draws = 0)$adjusted$adjusted
-  rs <- deconflate(y, method = "global", joint = js, warn = FALSE, n_draws = 0)$adjusted$adjusted
+  re <- deconflate(y, joint = je, warn = FALSE, n_draws = 0)$adjusted$adjusted
+  rs <- deconflate(y, joint = js, warn = FALSE, n_draws = 0)$adjusted$adjusted
   expect_lt(max(abs(re - rs)), 0.05 * max(abs(re)))
 })

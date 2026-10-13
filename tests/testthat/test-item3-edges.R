@@ -47,26 +47,38 @@ test_that("the seed also makes a sampled joint distribution reproducible", {
   expect_equal(a$unknown_pairs$fitted_or, b$unknown_pairs$fitted_or)
 })
 
-test_that("replacing the impacts or interactions of a model drops their distributions", {
+test_that("replacing the impacts of a model drops their distributions", {
   m <- unc_model()
-  ev <- cm_model(m, cm_impacts(ids3, c(1.5, 2, 1.3), measure = "HR", estimand = "snapshot_crude"))
-  expect_equal(names(ev$distributions), "assoc:d2:d3")
+  expect_equal(names(m$distributions), c("impacts:1", "associations:3"))
+  ev <- cm_model(m, cm_impacts(ids3, c(1.5, 2, 1.3), measure = "HR"))
+  expect_equal(names(ev$distributions), "associations:3")
   # The same impacts keep theirs.
   expect_equal(names(cm_model(m, m$impacts)$distributions), names(m$distributions))
-  mi <- cm_model(example_supplement(), example_supplement()$impacts, cm_interactions("d1", "d2", 1),
-                 distributions = list("inter:d1:d2" = dist_normal(1, 0.2)))
-  expect_null(cm_model(mi, mi$impacts)$distributions)
+  mi <- supp_model(c(2.5, 5, 7.5), interactions = c("d1;d2" = 1))
+  mi <- cm_model(mi, mi$impacts, distributions = list("inter:d1:d2" = dist_normal(1, 0.2)))
+  expect_equal(names(mi$distributions), "impacts:4")
+  expect_null(cm_model(mi, example_supplement()$impacts)$distributions)
 })
 
 test_that("scenario setters fix the value they set", {
-  mi <- cm_model(example_supplement(), example_supplement()$impacts, cm_interactions("d1", "d2", 1),
-                 distributions = list("inter:d1:d2" = dist_normal(1, 0.2), "impact:d1" = dist_normal(2.5, 0.5)))
+  mi <- supp_model(c(2.5, 5, 7.5), interactions = c("d1;d2" = 1))
+  mi <- cm_model(mi, mi$impacts, distributions = list("inter:d1:d2" = dist_normal(1, 0.2),
+                                                      "impact:d1" = dist_normal(2.5, 0.5)))
   si <- set_interaction(mi, "d1", "d2", 3)
-  expect_equal(names(si$distributions), "impact:d1")
-  mt <- cm_model(supp_population(three_way = cm_three_way("d1", "d2", "d3", 1.5)),
+  expect_equal(names(si$distributions), "impacts:1")
+  expect_equal(si$impacts$value[si$impacts$row == 4], 3)
+  expect_equal(nrow(si$impacts), 4)
+  mt <- cm_model(supp_population(cm_associations("d1", "d2", 1.5, measure = "OR_ratio", among = "d3")),
                  example_supplement()$impacts,
                  distributions = list("three:d1:d2:d3" = dist_lognormal_ci(1.5, 0.8, 2.8)))
-  expect_null(set_three_way(mt, "d3", "d1", "d2", 2)$distributions)
+  expect_equal(names(mt$distributions), "associations:4")
+  st <- set_three_way(mt, "d3", "d1", "d2", 2)
+  expect_null(st$distributions)
+  expect_equal(nrow(st$associations), 4)
+  expect_equal(st$associations$among[4], "d2")
+  sa <- set_association(mt, "d2", "d1", 2.5)
+  expect_equal(sa$associations$value[1], 2.5)
+  expect_equal(sa$associations$row, 1:4)
 })
 
 test_that("negative risk differences give no spurious warnings", {
@@ -76,12 +88,10 @@ test_that("negative risk differences give no spurious warnings", {
   expect_lt(r$adjusted$adjusted[3], 1)
 })
 
-test_that("interactions cannot be combined with event impacts", {
-  m <- supp_hr_model()
-  m$interactions <- cm_interactions("d1", "d2", 1)
-  expect_error(deconflate(m, event_model = TRUE, overall_risk = 0.25), "additive impacts only",
+test_that("additive interaction setters do not apply to event impacts", {
+  expect_error(set_interaction(supp_hr_model(), "d1", "d2", 1), "additive interactions",
                class = "deconflate_unsupported")
-  expect_error(screen_interactions(supp_hr_model(), values = 1), "additive impacts only")
+  expect_error(screen_interactions(supp_hr_model(), values = 1), "additive interactions")
   expect_error(cm_threshold(supp_hr_model(), "inter:d1:d2", c(-1, 1), conclusion = "total", target = 0.05,
-                            event_model = TRUE, overall_risk = 0.25), "additive impacts only")
+                            event_model = TRUE, overall_risk = 0.25), "additive interactions")
 })

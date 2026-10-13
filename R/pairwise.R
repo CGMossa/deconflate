@@ -44,9 +44,11 @@ joint_to_or <- function(p11, p1, p2) {
 
 #' Joint probability of a disease pair from any supported measure
 #'
-#' @param measure One of the measures in [cm_associations()].
+#' @param measure `"OR"`, `"RR"`, `"RD"`, `"phi"` or `"prevalence"` (see
+#'   [cm_associations()]; the directional measures treat disease 1 as the
+#'   outcome and disease 2 as the comparison).
 #' @param value Association value.
-#' @param p1,p2 Marginal probabilities of `disease1` and `disease2`.
+#' @param p1,p2 Marginal probabilities of disease 1 and disease 2.
 #' @return `P(d1 and d2)`. Errors with class `deconflate_infeasible` if the
 #'   measure is incompatible with the marginals.
 #' @export
@@ -55,7 +57,7 @@ association_to_joint <- function(measure, value, p1, p2) {
     OR = return(or_to_joint(value, p1, p2)),
     RR = value * p1 / (1 - p2 + value * p2) * p2,
     RD = (value * (1 - p2) + p1) * p2,
-    cond_prob = value * p2,
+    prevalence = value * p2,
     phi = p1 * p2 + value * sqrt(p1 * (1 - p1) * p2 * (1 - p2)),
     cm_abort(sprintf("Cannot convert measure '%s' to a joint probability.", measure))
   )
@@ -70,21 +72,36 @@ association_to_joint <- function(measure, value, p1, p2) {
 
 #' Pairwise 2x2 tables for every disease pair
 #'
+#' The tables that the crude pair rows of the associations give (one disease
+#' in `disease`, one in `associated_with`, no `among`, not adjusted for
+#' diseases of the model). Several rows of one pair are pooled (see
+#' [deconflate()]).
+#'
 #' @param model A [cm_population()] or [cm_model()].
-#' @return A data frame with one row per unordered pair: the measure used
-#'   (`NA` for a pair without an association), its `status` (`"specified"`
-#'   or `"unknown"`), the joint probability `p11` (`NA` for unknown pairs),
-#'   the implied odds ratio, and the excess probabilities
+#' @param pool `"random"` (default) or `"fixed"`: how several rows of one
+#'   pair are pooled.
+#' @return A data frame with one row per unordered pair: the measure (or
+#'   `"pooled"`), its `status` (`"specified"`: a crude pair row;
+#'   `"other rows"`: only other kinds of rows mention the pair, e.g. within a
+#'   subgroup; `"unknown"`: no row mentions it), the association rows used,
+#'   the joint probability `p11` (`NA` unless specified), the implied odds
+#'   ratio, and the excess probabilities
 #'   `ep_2_given_1 = P(d2 | d1) - P(d2 | not d1)` and `ep_1_given_2`.
 #' @export
-pair_tables <- function(model) {
+pair_tables <- function(model, pool = c("random", "fixed")) {
   check_population(model)
-  ids <- model$diseases$id
+  pair_tables_at(model, match.arg(pool))
+}
+
+# pair_tables() with the pooling of the draws (frozen weights, between-study
+# deviates).
+pair_tables_at <- function(model, pool = "random", frozen = NULL, between = NULL) {
+  ids <- model$diseases$disease
   p <- stats::setNames(model$diseases$prob, ids)
   n <- length(ids)
   if (n < 2L) {
     return(data.frame(disease1 = character(0), disease2 = character(0),
-                      measure = character(0), status = character(0),
+                      measure = character(0), status = character(0), rows = character(0),
                       p11 = numeric(0), or = numeric(0),
                       ep_2_given_1 = numeric(0), ep_1_given_2 = numeric(0)))
   }
@@ -92,35 +109,48 @@ pair_tables <- function(model) {
   d1 <- pairs[, 1]
   d2 <- pairs[, 2]
   np <- length(d1)
-  assoc <- model$associations
-  akey <- if (is.null(assoc)) character(0) else pair_key(assoc$disease1, assoc$disease2)
-  hit <- match(pair_key(d1, d2), akey)
-
-  # Pairs without an association are unknown.
+  key <- pair_key(d1, d2)
   measure <- rep(NA_character_, np)
   status <- rep("unknown", np)
+  rows <- rep(NA_character_, np)
   p11 <- rep(NA_real_, np)
-  spec <- which(!is.na(hit))
-  if (length(spec)) {
-    a <- assoc[hit[spec], , drop = FALSE]
-    measure[spec] <- a$measure
-    status[spec] <- "specified"
-    # Directional measures are defined with the row's own orientation.
-    p11[spec] <- vapply(seq_along(spec), function(j) {
-      association_to_joint(a$measure[j], a$value[j], p[[a$disease1[j]]], p[[a$disease2[j]]])
-    }, numeric(1))
+  specs <- association_specs(model)
+  # Pairs mentioned by any row.
+  for (s in specs) {
+    mem <- c(s$g, s$h)
+    if (length(mem) >= 2L) {
+      cb <- utils::combn(mem, 2)
+      status[key %in% pair_key(cb[1, ], cb[2, ])] <- "other rows"
+    }
+  }
+  groups <- Filter(function(g) g$pair, association_groups(specs))
+  info <- NULL
+  if (length(groups)) {
+    ctx <- list(P = p)
+    info <- group_targets(groups, ctx, model, pool, frozen, between)
+    check_exact_rows(groups, info)
+    for (j in seq_along(groups)) {
+      s <- groups[[j]]$specs[[1]]
+      k <- match(pair_key(s$g, s$h), key)
+      status[k] <- "specified"
+      measure[k] <- if (length(groups[[j]]$specs) > 1L) "pooled" else s$measure
+      rows[k] <- paste(groups[[j]]$rows, collapse = ", ")
+      p11[k] <- info[[j]]$target
+    }
   }
   p1 <- unname(p[d1])
   p2 <- unname(p[d2])
-  p11 <- unname(p11)
-  data.frame(
-    disease1 = d1, disease2 = d2, measure = measure, status = status,
+  out <- data.frame(
+    disease1 = d1, disease2 = d2, measure = measure, status = status, rows = rows,
     p11 = p11,
     or = ifelse(is.na(p11), NA_real_, joint_to_or(p11, p1, p2)),
     ep_2_given_1 = p11 / p1 - (p2 - p11) / (1 - p1),
     ep_1_given_2 = p11 / p2 - (p1 - p11) / (1 - p2),
     stringsAsFactors = FALSE
   )
+  attr(out, "pooling") <- list(groups = groups, info = info, pool = pool,
+                               frozen = freeze_pooling(groups, info))
+  out
 }
 
 #' Excess-probability matrix from pairwise tables
@@ -129,16 +159,15 @@ pair_tables <- function(model) {
 #' @return An n x n matrix `E` with `E[k, i] = P(k | i) - P(k | not i)`, the
 #'   excess probability of disease `k` among animals with disease `i`
 #'   (`ep_ki` in Rasmussen et al. 2022, eq. 14). The diagonal is 0. Errors if
-#'   any pair is unknown (has no association): pairwise tables need every
-#'   pair.
+#'   any pair has no crude pair row: pairwise tables need every pair.
 #' @export
 excess_matrix <- function(model) {
   pt <- pair_tables(model)
-  ids <- model$diseases$id
+  ids <- model$diseases$disease
   if (anyNA(pt$p11)) {
     unk <- paste(pt$disease1, pt$disease2, sep = "-")[is.na(pt$p11)]
     cm_abort(sprintf(
-      "No association for %s: the excess matrix needs every pair. Give these pairs an association (an odds ratio of 1 if they are unrelated), or use deconflate(), which fills them in with the global method.",
+      "No crude pair row for %s: the excess matrix needs every pair. Give these pairs an association (an odds ratio of 1 if they are unrelated), or use deconflate(), which fills them in.",
       paste(unk, collapse = ", ")), class = c("deconflate_unknown_pairs", "deconflate_unsupported"))
   }
   E <- matrix(0, length(ids), length(ids), dimnames = list(ids, ids))
@@ -151,15 +180,11 @@ excess_matrix <- function(model) {
 
 # n x n matrix of joint probabilities P(j and k) from pairwise tables
 # (diagonal = marginal probabilities).
-pairwise_joint_matrix <- function(model) {
-  pt <- pair_tables(model)
-  ids <- model$diseases$id
-  J <- diag(model$diseases$prob, nrow = length(ids))
+pairwise_joint_matrix <- function(pt, ids, P) {
+  J <- diag(P, nrow = length(ids))
   dimnames(J) <- list(ids, ids)
-  for (r in seq_len(nrow(pt))) {
-    J[pt$disease1[r], pt$disease2[r]] <- pt$p11[r]
-    J[pt$disease2[r], pt$disease1[r]] <- pt$p11[r]
-  }
+  J[cbind(pt$disease1, pt$disease2)] <- pt$p11
+  J[cbind(pt$disease2, pt$disease1)] <- pt$p11
   J
 }
 
@@ -172,33 +197,29 @@ pair_covariance <- function(J) {
   S
 }
 
-# Conflation matrix A (raw = A %*% adjusted) from the covariance matrix of the
-# disease indicators, for impacts that are crude differences or coefficients
-# of an additive regression adjusted for a set of diseases. Row i holds, for
-# each omitted disease k, the coefficient of D_i in the population linear
-# projection of D_k on (D_i, D_S). For crude estimates (S empty) this is the
-# excess probability P(k | i) - P(k | not i).
-projection_matrix <- function(Sigma, impacts, ids) {
+# Coefficients of impact rows about one disease (no subgroup) on the
+# diseases' own impacts, from the covariance matrix of the disease
+# indicators: for a crude row of disease i, the excess probabilities
+# P(k | i) - P(k | not i); for a row adjusted for diseases S, the coefficient
+# of D_i in the population linear projection of D_k on (D_i, D_S), with 0 for
+# the diseases in S.
+pairwise_coefficients <- function(Sigma, specs, ids) {
   n <- length(ids)
-  A <- diag(n)
-  dimnames(A) <- list(ids, ids)
-  for (i in seq_len(n)) {
-    S <- if (impacts$estimand[i] == "adjusted_linear") {
-      match(resolve_adjusted_for(impacts$adjusted_for[i], ids[i], ids), ids)
-    } else integer(0)
+  A <- matrix(0, length(specs), n, dimnames = list(NULL, ids))
+  for (r in seq_along(specs)) {
+    s <- specs[[r]]
+    i <- match(s$g, ids)
+    S <- match(if (s$adj_all) setdiff(ids, s$g) else s$adj, ids)
     X <- c(i, S)
     sxx <- Sigma[X, X, drop = FALSE]
     rc <- if (!all(is.finite(sxx))) NA_real_ else if (length(X) == 1L) 1 else rcond(sxx)
     if (!is.finite(rc) || rc < 1e-10 || sxx[1, 1] <= 0) {
-      cm_abort(sprintf("The estimand of %s is not identifiable: its adjustment set is (nearly) collinear with it in this population.",
-                       ids[i]), class = "deconflate_singular")
+      cm_abort(sprintf("%s: the estimate is not identifiable: its adjustment set is (nearly) collinear with the disease in this population.",
+                       s$where), class = "deconflate_singular")
     }
+    A[r, i] <- 1
     others <- setdiff(seq_len(n), X)
-    if (length(others)) {
-      g <- solve(sxx, Sigma[X, others, drop = FALSE])
-      A[i, others] <- g[1, ]
-    }
-    if (length(S)) A[i, S] <- 0
+    if (length(others)) A[r, others] <- solve(sxx, Sigma[X, others, drop = FALSE])[1, ]
   }
   A
 }

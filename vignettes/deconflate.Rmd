@@ -30,25 +30,30 @@ additive outcome works the same way.
 ## A population and an impact table
 
 The population holds what every outcome shares: the disease probabilities
-and the pairwise associations. This is the three-disease example from the
+and the association rows. This is the three-disease example from the
 Supplementary File of Rasmussen et al. (2022):
 
 ```{r}
 pop <- cm_population(
-  cm_diseases(c("d1", "d2", "d3"), c(0.10, 0.15, 0.20), type = "prevalence"),
+  cm_diseases(c("d1", "d2", "d3"), c(0.10, 0.15, 0.20), measure = "prevalence"),
   cm_associations(c("d1", "d1", "d2"), c("d2", "d3", "d3"), c(2, 1, 3), measure = "OR")
 )
 pop
 ```
 
-Associations are odds ratios by default (risk ratios, risk differences,
-conditional probabilities and phi coefficients are also accepted; see
-`?cm_associations`). An odds ratio of 1, as for d1 and d3, states that two
-diseases are unrelated. A pair with no association at all is *unknown*:
-`deconflate()` then fills it in from the other associations (below).
+Each association row relates a `disease` to the diseases it is
+`associated_with`. Rows are odds ratios by default (risk ratios, risk
+differences, phi coefficients, prevalences and ratios of odds ratios are
+also accepted; see `?cm_associations`). A row can also be about a
+combination of diseases, hold within a subgroup (`among`), be adjusted for
+other diseases (`adjusted_for`), and a pair can have several rows (from
+several studies), which are pooled; see `vignette("interactions")`. An odds
+ratio of 1, as for d1 and d3, states that two diseases are unrelated. A pair
+with no row at all is *unknown*: `deconflate()` then fills it in from the
+other rows (below).
 
-A model adds one impact table: one raw estimate per disease, all in the
-same units. The units can be anything additive (percent of yield, kg of
+A model adds one impact table: at least one raw estimate per disease, all
+in the same units. The units can be anything additive (percent of yield, kg of
 milk, days, euros, a welfare score); the engine does not convert them, and
 the results come back in the units supplied.
 
@@ -95,39 +100,43 @@ res <- deconflate(m)
 res
 ```
 
-`deconflate()` has two exact methods, chosen automatically
-(`method = "auto"`, the default):
+`deconflate()` has one model. It describes the population by the
+maximum-entropy distribution of disease combinations that matches every
+association row (the distribution that assumes nothing beyond the rows),
+and finds the adjusted impacts (and any interactions) that reproduce every
+impact row. Up to 20 diseases it enumerates all combinations; beyond that
+it uses the sampled backend of `fit_joint()`
+(`vignette("thresholds-and-scaling")`).
 
-* the **simultaneous** method solves the system of impact equations from
-  the pairwise 2x2 tables. It works for any number of diseases;
-* the **global** method fits the maximum-entropy distribution of disease
-  combinations and solves the same equations from it. It also handles
-  unknown pairs, impact interactions and three-way terms
-  (`vignette("interactions")`). Up to 20 diseases it enumerates all
-  combinations; beyond that it uses the sampled backend of `fit_joint()`
-  (`vignette("thresholds-and-scaling")`).
+When every association row is a crude row about a pair, every pair has one,
+and every impact row is a crude or adjusted row about one disease, the
+pairwise 2x2 tables give the same answer as the full distribution, and
+`deconflate()` uses them directly (it still fits the distribution once, to
+check that the rows can hold together). `$diagnostics$method` says which
+was used:
 
-When every pair has an association and there are no interactions or
-three-way terms, the two give the same answer and the simultaneous method
-is used. Otherwise the global method is used, and a note says why. Leaving
-out the d1:d3 odds ratio makes that pair unknown:
+```{r}
+res$diagnostics$method
+```
+
+Leaving out the d1:d3 odds ratio makes that pair unknown:
 
 ```{r}
 pop_unknown <- cm_population(pop$diseases,
                              cm_associations(c("d1", "d2"), c("d2", "d3"), c(2, 3)))
 res_unknown <- deconflate(cm_model(pop_unknown, yield))
-res_unknown$notes
+res_unknown$diagnostics$method
 res_unknown$unknown_pairs
 rbind(odds_ratio_1 = setNames(res$adjusted$adjusted, res$adjusted$disease),
       unknown = res_unknown$adjusted$adjusted)
 ```
 
-The global fit gives d1 and d3 a positive association (an odds ratio of
+The fit gives d1 and d3 a positive association (an odds ratio of
 about 1.14), implied by their associations with d2, so the adjusted impacts
 differ from those with an odds ratio of 1. Unknown is not the same as independent; see
 `vignette("interactions")`.
 
-`compare_methods()` sets the methods side by side, without switching:
+`compare_methods()` sets the model beside the published approximation:
 
 ```{r}
 compare_methods(m)
@@ -136,15 +145,15 @@ compare_methods(m)
 The `"published"` column is the proportional approximation of Rasmussen et
 al. (2022, 2024), eq. 16. It is not a method of `deconflate()`: it is kept
 for comparison (`compare_methods()`) and for reproducing the published
-analyses (`vignette("reproducing-published")`) only. It is defined for crude
-estimates only.
+analyses (`vignette("reproducing-published")`) only. It is defined for one
+crude row per disease only.
 
 The diagnostics report how well the adjusted impacts reconstruct the raw
 ones, the condition number of the conflation matrix, and adjusted impacts
 whose sign differs from the raw impact. A sign change means that the raw
 impact is smaller than the associated diseases alone would produce, so the
-inputs are inconsistent under the additive model (or the estimands are not
-what they were assumed to be):
+inputs are inconsistent under the additive model (or the rows do not mean
+what they were taken to mean, e.g. an adjusted estimate entered as crude):
 
 ```{r}
 low_d2 <- cm_model(pop, cm_impacts(c("d1", "d2", "d3"), c(2.5, 0.2, 7.5)))
@@ -179,31 +188,31 @@ cm_threshold(m, "assoc:d2:d3", c(0.1, 100), conclusion = "rank")$thresholds[
 
 See `vignette("thresholds-and-scaling")`.
 
-## Estimands
+## What an impact row means
 
-Each raw impact must be one of two estimands, set explicitly in
-`cm_impacts()`:
+An impact row is read as a crude or an adjusted estimate, depending on
+`adjusted_for`:
 
-* `"crude"` (default): the difference in the outcome between animals with
-  and without the disease, not adjusted for other diseases.
-* `"adjusted_linear"`: the coefficient of the disease in an additive
-  (linear) regression of the outcome on the disease and the diseases listed
-  in `adjusted_for` (ids separated by `";"`, or `"all"` for every other
-  disease).
+* empty (the default): **crude**, the difference in the outcome between
+  animals with and without the disease, not adjusted for other diseases;
+* disease ids separated by `";"`, or `"all"` for every other disease:
+  **adjusted**, the coefficient of the disease in an additive (linear)
+  regression of the outcome on the disease and those diseases.
 
-`adjusted_for` is never used to infer the estimand. Giving it for a crude
-estimate is an error:
+Ids in `adjusted_for` that are not diseases of the model (herd, parity,
+...) are noted and otherwise ignored. For an adjusted estimate, the package
+uses the population regression implied by the distribution of disease
+combinations. This requires that the probabilities and associations
+describe the source population of the estimates. Other adjusted estimates
+(matched or propensity-score estimates, for example) are not supported.
 
-```{r}
-tryCatch(cm_impacts("d1", 2, adjusted_for = "d2"),
-         deconflate_unsupported = function(e) conditionMessage(e))
-```
-
-Other adjusted estimands (matched or propensity-score estimates, for
-example) are not supported. For an adjusted estimate, the package uses the
-population linear projection of the omitted diseases, which depends only on
-the pairwise tables. This requires that the probabilities and associations
-describe the source population of the estimates.
+A row can also be about a combination of diseases (`"d1;d2"`: animals with
+both compared with animals with neither), which identifies an interaction,
+and it can hold within a subgroup (`among`, e.g. `"d2"`, `"no d2"` or
+`"no others"` for animals with none of the other diseases). A disease can
+have several rows; when they have distributions, they are combined by
+weighted least squares and `$heterogeneity` says how well they agree. See
+`?cm_impacts` and `vignette("interactions")`.
 
 A worked example: in the population above, the true additive impacts are
 0.02, 0.04 and 0.06. A study of d1 that adjusted for d2, and crude studies of
@@ -211,18 +220,14 @@ d2 and d3, would report:
 
 ```{r}
 truth <- c(d1 = 0.02, d2 = 0.04, d3 = 0.06)
-raw <- simulate_raw_impacts(pop, truth,
-                            estimand = c("adjusted_linear", "crude", "crude"),
-                            adjusted_for = c("d2", NA, NA))
+raw <- simulate_raw_impacts(pop, truth, adjusted_for = c("d2", NA, NA))
 round(raw$value, 4)
 ```
 
-With the estimands recorded, the adjustment recovers the truth:
+With `adjusted_for` recorded, the adjustment recovers the truth:
 
 ```{r}
-imp_adj <- cm_impacts(c("d1", "d2", "d3"), raw$value,
-                      estimand = c("adjusted_linear", "crude", "crude"),
-                      adjusted_for = c("d2", NA, NA))
+imp_adj <- cm_impacts(c("d1", "d2", "d3"), raw$value, adjusted_for = c("d2", NA, NA))
 m_adj <- cm_model(pop, imp_adj)
 deconflate(m_adj)$adjusted
 ```
@@ -235,7 +240,7 @@ m_wrong <- cm_model(pop, cm_impacts(c("d1", "d2", "d3"), imp_adj$value))
 deconflate(m_wrong)$adjusted$adjusted
 ```
 
-The published approximation is not defined for adjusted estimands;
+The published approximation is not defined for adjusted estimates;
 `compare_methods()` records the reason:
 
 ```{r}
@@ -263,14 +268,13 @@ for the draws, their stability checks and the sensitivity tools.
 
 Impacts on the risk of an event, such as culling or death, are hazard
 ratios, rate ratios, risk ratios, odds ratios or risk differences rather than
-additive amounts. They are given with a `measure` (one per disease; measures
-can be mixed) and a snapshot estimand, and adjusted with
+additive amounts. They are given with a `measure` (one per row; measures
+can be mixed), crude or adjusted as above, and adjusted with
 `event_model = TRUE` and the overall risk of the event over the period:
 
 ```{r}
 cull <- cm_model(pop, cm_impacts(c("d1", "d2", "d3"), c(1.5, 2.0, 1.2),
-                                 measure = c("HR", "HR", "RR"),
-                                 estimand = "snapshot_crude", label = "culling"))
+                                 measure = c("HR", "HR", "RR"), label = "culling"))
 res_cull <- deconflate(cull, event_model = TRUE, overall_risk = 0.25)
 res_cull$adjusted
 res_cull$attributable$summary
@@ -327,9 +331,8 @@ the interval bounds of the aggregate (`adjusted_total_lower` and
 ## Feasibility
 
 Each pairwise table can be valid on its own while no population has all of
-them. By default the simultaneous method screens every triple of diseases (a
-necessary condition), and `feasibility = "lp"` runs an exact check (it
-needs the `lpSolve` package):
+them. Fitting the distribution of disease combinations for the central
+estimate checks that the rows can hold together:
 
 ```{r}
 res$diagnostics$feasibility
@@ -347,6 +350,10 @@ bad <- cm_model(
 check_feasibility(bad, method = "triples")
 ```
 
+`check_feasibility()` screens every triple of diseases (a necessary
+condition) and, with `method = "lp"`, runs an exact check of the pairwise
+tables (it needs the `lpSolve` package).
+
 ## Conditions
 
 Errors and warnings have classes, so that callers (and the draws and
@@ -357,7 +364,7 @@ sensitivity tools of the package) can handle them separately:
 | `deconflate_infeasible` | inputs that admit no valid probabilities (e.g. the example above) |
 | `deconflate_singular` | a singular or non-identifiable system |
 | `deconflate_nonconvergence` | a numerical procedure did not converge |
-| `deconflate_unsupported` | an estimand and method combination that is not supported |
+| `deconflate_unsupported` | inputs or arguments that are not supported (or no longer used) |
 | `deconflate_nonfinite` | non-finite results |
 | `deconflate_input_problems` | `cm_read_inputs()` found errors in the input tables |
 
@@ -388,7 +395,7 @@ so only approximately:
 
 ```{r}
 m_sim <- cm_model(pop, simulate_raw_impacts(pop, c(d1 = 2, d2 = 4, d3 = 6)))
-compare_methods(m_sim, methods = c("published", "simultaneous"))
+compare_methods(m_sim)
 ```
 
 ## Where next
@@ -399,10 +406,11 @@ compare_methods(m_sim, methods = c("published", "simultaneous"))
   attributable to disease.
 * `vignette("reproducing-published")`: the 2022 and 2024 analyses.
 * `vignette("interactions")`: the joint distribution, unknown associations,
-  impact interactions, three-way scenarios and attribution.
+  rows about combinations and subgroups, several rows per item, impact
+  interactions and attribution.
 * `vignette("uncertainty")`: draws and intervals, stability checks and
   sensitivity screening.
 * `vignette("thresholds-and-scaling")`: threshold searches with
   `cm_threshold()` (at what input value does a ranking, a sign or the
-  aggregate change?), and the sampled backend of `fit_joint()` for the
-  global method with more than about 20 diseases.
+  aggregate change?), and the sampled backend of `fit_joint()` for more
+  than about 20 diseases.

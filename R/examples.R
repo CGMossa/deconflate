@@ -17,7 +17,7 @@
 #' compare_methods(example_supplement())
 example_supplement <- function() {
   pop <- cm_population(
-    cm_diseases(c("d1", "d2", "d3"), c(0.10, 0.15, 0.20), type = "prevalence"),
+    cm_diseases(c("d1", "d2", "d3"), c(0.10, 0.15, 0.20)),
     cm_associations(c("d1", "d1", "d2"), c("d2", "d3", "d3"), c(2, 1, 3), measure = "OR")
   )
   cm_model(pop, cm_impacts(c("d1", "d2", "d3"), c(2.5, 5, 7.5), label = "yield", units = "%",
@@ -67,7 +67,7 @@ global_dairy_inputs <- function(inputs) {
           "RP:OC" = 2.18, "SCK:RP" = 1.52)
   pr <- do.call(rbind, strsplit(names(or), ":", fixed = TRUE))
   pop <- cm_population(
-    cm_diseases(ids, unname(inc[ids]) / 100, type = type, time_horizon = "lactation", source = src),
+    cm_diseases(ids, unname(inc[ids]) / 100, measure = type, time_horizon = "lactation", source = src),
     cm_associations(pr[, 1], pr[, 2], unname(or), measure = "OR",
                     source = "Rasmussen et al. 2024, Table 3")
   )
@@ -84,9 +84,9 @@ global_dairy_inputs <- function(inputs) {
 #' the analysis, so [deconflate()] reports intervals (use `n_draws = 0` for
 #' point estimates only).
 #'
-#' Pairs not in Table 3 are unknown, as for any input in this package, so
-#' [deconflate()] uses the global method. The 2024 analysis treated them as
-#' independent; [reproduce_rasmussen_2024()] does the same.
+#' Pairs not in Table 3 are unknown, as for any input in this package: the
+#' model fills them in. The 2024 analysis treated them as independent;
+#' [reproduce_rasmussen_2024()] does the same.
 #'
 #' @section Two versions of the inputs:
 #' * `inputs = "analysis"` (default) uses the inputs of the published
@@ -102,8 +102,8 @@ global_dairy_inputs <- function(inputs) {
 #' zero.
 #'
 #' @section Culling:
-#' `outcome = "culling"` gives the hazard ratios as event impacts (estimand
-#' `"snapshot_crude"`, an assumption), for
+#' `outcome = "culling"` gives the hazard ratios as event impacts (crude
+#' snapshot comparisons, an assumption), for
 #' `deconflate(..., event_model = TRUE, overall_risk = 0.2366)` (the global
 #' culling risk of the 2024 analysis). The 2024 analysis adjusted hazard
 #' ratios minus 1 as if they were additive impacts; that historical
@@ -131,7 +131,7 @@ example_global_dairy <- function(outcome = c("yield", "fertility", "culling"),
                        units = "% decrease", source = g$src),
     fertility = cm_impacts(g$ids, unname(g$fert[g$ids]), label = "calving interval increase",
                            units = "% increase", source = g$src),
-    culling = cm_impacts(g$ids, unname(g$hr[g$ids]), measure = "HR", estimand = "snapshot_crude",
+    culling = cm_impacts(g$ids, unname(g$hr[g$ids]), measure = "HR",
                          label = "culling", source = g$src))
   impd <- switch(outcome, yield = d$yield, fertility = d$fert, culling = d$cull_hr)
   dists <- c(d$pop, if (length(impd)) stats::setNames(impd, paste0("impact:", names(impd))))
@@ -166,7 +166,9 @@ with_independent_pairs <- function(pop) {
   if (!nrow(u)) return(pop)
   add <- cm_associations(u$disease1, u$disease2, 1, measure = "OR",
                          source = "unlisted pair, independent (published analysis)")
-  pop$associations <- if (is.null(pop$associations)) add else rbind(pop$associations, add)
+  a <- pop$associations
+  if (!is.null(a)) add$row <- max(a$row) + seq_len(nrow(add))
+  pop$associations <- if (is.null(a)) add else rbind(a, add)
   pop
 }
 
@@ -176,14 +178,14 @@ with_independent_pairs <- function(pop) {
 #' prevalence (Table 2), inter-disease odds ratios (Table 3), and the raw
 #' impacts of one outcome: milk yield (Table 4, % decrease), calving interval
 #' (Table 5, % increase) or culling (Table 6, hazard ratios, as event impacts
-#' with estimand `"snapshot_crude"`, an assumption; use
+#' (crude snapshot comparisons, an assumption); use
 #' `deconflate(..., event_model = TRUE, overall_risk = 0.27)`, the annual
 #' culling rate of the paper). Use [reproduce_rasmussen_2022()] for the
 #' published tables, including the economic values.
 #'
-#' Pairs not in Table 3 are unknown, as for any input in this package, so
-#' [deconflate()] uses the global method. The paper treated them as
-#' independent; [reproduce_rasmussen_2022()] does the same. The paper
+#' Pairs not in Table 3 are unknown, as for any input in this package: the
+#' model fills them in. The paper treated them as independent;
+#' [reproduce_rasmussen_2022()] does the same. The paper
 #' converted the hazard ratios to excess annual culling risks by treating
 #' them as odds ratios; that historical calculation is only available inside
 #' [reproduce_rasmussen_2022()].
@@ -206,7 +208,7 @@ example_uk_dairy_2022 <- function(outcome = c("yield", "fertility", "culling"), 
   u <- uk_dairy_2022_inputs(yield_sck)
   imp <- switch(outcome,
     yield = u$yield, fertility = u$fertility,
-    culling = cm_impacts(u$ids, unname(u$hr[u$ids]), measure = "HR", estimand = "snapshot_crude",
+    culling = cm_impacts(u$ids, unname(u$hr[u$ids]), measure = "HR",
                          label = "culling", source = "Rasmussen et al. 2022, Table 6"))
   cm_model(u$pop, imp)
 }
@@ -222,7 +224,7 @@ uk_dairy_2022_inputs <- function(yield_sck) {
           "SCK:CO" = 1.60, "MET:SCK" = 1.40, "SCK:RP" = 1.20)
   pr <- do.call(rbind, strsplit(names(or), ":", fixed = TRUE))
   pop <- cm_population(
-    cm_diseases(ids, unname(prev[ids]), type = "prevalence", time_horizon = "year",
+    cm_diseases(ids, unname(prev[ids]), measure = "prevalence", time_horizon = "year",
                 reference_population = "UK dairy cows", source = "Rasmussen et al. 2022, Table 2"),
     cm_associations(pr[, 1], pr[, 2], unname(or), measure = "OR",
                     source = "Rasmussen et al. 2022, Table 3")

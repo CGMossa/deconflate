@@ -1,36 +1,110 @@
 # deconflate (development version)
 
 Version 0.4 is being built in steps (see `ROADMAP.md`). So far: the
-interface is slimmed to de-conflation itself, and everything runs through
-one function, `deconflate()`, with one impact table per call.
+interface is slimmed to de-conflation itself; everything runs through one
+function, `deconflate()`, with one impact table per call; and there is one
+model and one input layout, in which a row can be about a combination of
+diseases or a subgroup, crude or adjusted, and several rows can describe
+the same thing.
 
-## Breaking changes
+## Breaking changes: one model, one input layout
+
+* **One model.** The `method` argument is removed from `deconflate()`,
+  `cm_threshold()` and the screens (an error says so). `deconflate()`
+  always gives the answer of the maximum-entropy model that matches every
+  association row and reproduces every impact row. When the pairwise 2x2
+  tables give the same answer (every association row a crude pair row,
+  every pair covered, one-disease impact rows, additive impacts), they are
+  used directly; up to 20 diseases the joint distribution is still fitted
+  once, to check that the rows can hold together. `$diagnostics$method`
+  says `"pairwise shortcut"` or `"full model"`. The `feasibility` argument
+  is removed (use `check_feasibility()` for the separate checks).
+  `compare_methods()` sets the model (`"deconflate"`) beside the published
+  approximation (`"published"`, and for event impacts `"first_order"`).
+* **One input layout.** Three tables, with the same core columns:
+  - `diseases`: `disease`, `measure` (`prevalence`, `probability`,
+    `incidence_rate`), `value`, and `label`, `time_horizon`,
+    `reference_population`;
+  - `associations`: `disease`, `associated_with`, `among`, `adjusted_for`,
+    `measure`, `value`, `study`;
+  - impacts: `disease`, `among`, `adjusted_for`, `measure` (event impacts
+    only), `value`, `label`, `units`, `study`;
+  plus `dist`, `p1`-`p4`, `source` and `note` everywhere. `disease` and
+  `associated_with` take a disease or a combination (`"MAS;SCK"`); `among`
+  takes a subgroup (`"SCK"`, `"no SCK"`, `"no others"`). `cm_diseases()`,
+  `cm_associations()` and `cm_impacts()` take the same arguments. Old
+  columns and arguments (`id`, `type`, `disease1`, `disease2`, `estimand`,
+  `adjusted`, `adjusted_associations`) give a message saying what to write
+  instead.
+* **Association measures:** `OR`, `RR`, `RD`, `phi`, `prevalence` (replaces
+  `cond_prob`) and `OR_ratio` (the odds ratio among a subgroup divided by
+  that among its complement; replaces three-way terms). A row about a
+  combination compares animals with all of its diseases against animals
+  with none of them. The three-way and interactions tables, `cm_three_way()`
+  and `cm_interactions()` are removed (`set_three_way()` and
+  `set_interaction()` now add rows); old files are recognised and reported.
+* **Estimands are decided by `adjusted_for`.** An impact or association row
+  is crude when `adjusted_for` is empty, and adjusted for the diseases it
+  names otherwise (`"all"`: every other disease and term). `estimand` is
+  removed. Adjusted associations are odds ratios between two diseases,
+  matched as logistic-regression coefficients; ids that are not diseases of
+  the model (parity, herd) are noted, and a row adjusted only for them is
+  used as crude.
+* **Distribution keys** are `prob:<disease>`, `associations:<row>` and
+  `impacts:<row>`; `assoc:<d1>:<d2>`, `impact:<disease>`, `inter:<d1>:<d2>`
+  and `three:<d1>:<d2>:<d3>` still work when they name one row.
+  `sensitivity_oat()` reports inputs by these keys.
+* **Results:** `$adjusted` has one row per term (diseases, then
+  interactions) with `kind`, `raw` (when the term has one row) and `rows`;
+  `$conflation$A` has one row per impact row; `raw_sum` is `NA` when a
+  disease has several rows. New: `$estimates` (every row with its fitted
+  value and standardised residual), `$heterogeneity` and `$pooling`.
+
+## New features: combinations, subgroups and several rows per item
+
+* **Rows about combinations and subgroups.** Association rows can relate
+  combinations, hold within subgroups and be adjusted for other diseases;
+  the joint distribution matches them all (raking on events). Impact rows
+  about a combination add an interaction (additive, or on the log-hazard
+  scale for event impacts); rows within subgroups and adjusted rows also
+  identify interactions. `deconflate()` checks that the rows determine
+  every term and names those they do not. Contributions split each
+  interaction equally among its diseases.
+* **Several rows per item.** Association rows about the same quantity are
+  pooled on the log scale, by random effects (DerSimonian-Laird; default)
+  or fixed effect (`pool = "fixed"`), with Q, I^2 and tau^2 in
+  `$heterogeneity`; draws keep the central weights and add the
+  between-study spread. Impact rows that over-determine the impacts are
+  fitted by weighted least squares (weights 1/SD^2; rows without a
+  distribution are exact).
+* `simulate_raw_impacts()` simulates rows of any kind (`rows`), with
+  interactions named by combination (`c("LAM;MAS" = 2)`).
+* The five-disease example has two studies of one odds ratio, an
+  `OR_ratio` row, several rows for one disease, a subgroup row and
+  interaction rows (additive and event). Reference values:
+  `inst/validation/reference_v041.py` (independent Python implementation).
+
+## Breaking changes: one function, one impact table
 
 * **One function, one impact table.** `deconflate()` adjusts one table of
   impact estimates; for several outcomes, call it once per table.
   `cm_analyses()` and the multi-analysis results are removed.
 * **Named input tables with any file name.** `cm_read_inputs()` and
   `cm_check_inputs()` take each table as its own argument (`diseases`,
-  `associations`, `impacts`, and optionally `interactions` and
-  `three_way`), as a path to a CSV file with any name or a data frame. The
+  `associations`, `impacts`), as a path to a CSV file with any name or a data frame. The
   `dir` argument and the fixed file names are removed. `deconflate()` needs
   at least one association; the sensitivity tools also run without any.
   `cm_template()` writes one example of each table (`type` is removed).
-* **Pairs without an association are unknown by default.** The global
-  model fills them in from the other associations, and the result lists
+* **Pairs without an association are unknown by default.** The model fills
+  them in from the other associations, and the result lists
   them with the odds ratios the fit gave them (`$unknown_pairs`). An odds
   ratio of 1 states that two diseases are unrelated. The argument
   `missing_associations` and the association measures `"independent"`,
   `"unknown"` and `"table"` (with `n11`-`n00`) are removed; old tables get
   a message saying what to write instead. The published analyses treated
   unlisted pairs as independent; the `reproduce_*()` functions still do.
-* **`method = "auto"` is the default.** It uses the simultaneous method when
-  every pair has an association and there are no interactions or three-way
-  terms (where the two methods give the same answer), and the global method
-  otherwise, with a note giving the reason. `method = "simultaneous"`
-  switches in the same way; `"global"` always uses the global method. With
-  more than 20 diseases the sampled backend of `fit_joint()` is used
-  automatically.
+* With more than 20 diseases the sampled backend of `fit_joint()` is used
+  automatically (for crude pair rows).
 * **Event impacts run through `deconflate()`.** With `event_model = TRUE`
   and `overall_risk` (a proportion or a distribution), the impact table has
   a `measure` column: hazard ratios, rate ratios, risk ratios, odds ratios
@@ -69,8 +143,8 @@ one function, `deconflate()`, with one impact table per call.
   and `example_uk_dairy_2022(outcome)` return the model of one outcome
   (`"yield"`, `"fertility"` or `"culling"`).
 * **Sensitivity tools** (`screen_associations()`, `screen_interactions()`,
-  `screen_three_way()`, `sensitivity_oat()`, `cm_threshold()`) use
-  `method = "auto"`, support event impacts (`event_model = TRUE`,
+  `screen_three_way()`, `sensitivity_oat()`, `cm_threshold()`) adjust each
+  scenario as `deconflate()` does, support event impacts (`event_model = TRUE`,
   `overall_risk`), and run on point estimates. `cm_threshold()` reports the
   methods it used and accepts the input `"risk"`.
 
@@ -377,20 +451,20 @@ Checked against the published 2024 analysis code (1st revision) and the 2022 cor
 * The reproduction vignette now has a comparison with Table 9 of Rasmussen et al. (2022), notes on the yield and fertility-allocation differences and on the corrigendum (which changes Table 7 only), and an updated 2024 section with long-run Monte Carlo means for yield and culling.
 * Added `inst/validation/reference_2024_analysis.py`.
 
-## 0.0.0.9001
+# deconflate 0.0.0.9001
 
 Builds the remaining v0.1 features.
 
-### Reproduction of the published analyses
+## Reproduction of the published analyses
 * Added the UK dairy model of Rasmussen et al. (2022): `example_uk_dairy_2022()` and `uk_dairy_2022_economics()`. It reproduces the fertility and culling results of Tables 8-10 and documents why the yield results differ (the printed Table 4 differs from the inputs implied by Tables 8-10).
 * Added `sampler_global_dairy()` with the input distributions of Rasmussen et al. (2024). Monte Carlo means of the adjusted yield impacts reproduce Table 5. The central value of the PERT distributions in Tables 2-4 is the mode.
 
-### Culling and valuation
+## Culling and valuation
 * Added `hr_conversion()`, `as_impacts()` and `adjusted_hr()`, which take culling hazard ratios through to adjusted hazard ratios. They support proportional-hazards and published (odds-ratio) conversions.
 * `productivity_gap()` now supports impacts on the absolute scale.
 * Added `value_losses()` to value gaps in money, and `combine_impacts()` to stack impact tables.
 
-### Uncertainty
+## Uncertainty
 * Added input distributions: `dist_fixed()`, `dist_normal()` (optionally truncated), `dist_lognormal()`, `dist_lognormal_ci()`, `dist_beta()`, `dist_pert()`, `dist_pert_mean()`, `dist_uniform()` and `dist_mixture()`.
 * Added `cm_sampler()`, which draws inputs on their entry scale. It supports optional correlation of impacts across outcomes (Gaussian copula).
 * `cm_monte_carlo()` now:
@@ -400,19 +474,19 @@ Builds the remaining v0.1 features.
 * Added `cm_scenario()` for scenario reweighting from distributions. `summary.cm_mc()` gains `what = "loss"`, `"total"` and `"rejections"`, and reports Monte Carlo standard errors.
 * Parameter keys are now `prob:<id>`, `assoc:<d1>:<d2>`, `impact:<outcome>:<disease>` and `inter:<outcome>:<d1>:<d2>`.
 
-### Feasibility, attribution and sensitivity
+## Feasibility, attribution and sensitivity
 * Added `check_feasibility()`. It runs a triple screen without extra packages and an exact linear-programming check when `lpSolve` is installed.
 * Added `shapley_by_cell()` with `loss_additive()` and `loss_multiplicative()`, for Shapley attribution of general loss functions.
 * Added sensitivity tools: `screen_associations()`, `screen_interactions()`, `sensitivity_oat()` and `compare_scenarios()`. Also added `set_association()` and `set_interaction()` for editing models.
 
-### Reporting
+## Reporting
 * Added `contribution_table()`, `summary()` for adjustment results, and base-graphics plots: `plot()` for results, Monte Carlo runs, screens and one-at-a-time sensitivity, plus `plot_burden()`.
 * Added four vignettes and a pkgdown configuration.
 
-### Other changes
+## Other changes
 * `pair_tables()` is vectorised, which makes Monte Carlo runs faster.
 * Hazard ratios of exactly 1 now give exactly zero excess risk.
 
-## 0.0.0.9000
+# deconflate 0.0.0.9000
 
 * Initial skeleton: input constructors, the three adjustment methods, the joint distribution, productivity gaps, Shapley attribution for pairwise interactions, hazard-ratio conversion and Monte Carlo with reweighting.

@@ -1,5 +1,6 @@
 # Shapley attribution (R/shapley.R) and sensitivity / scenario tools
-# (R/sensitivity.R). Supplement impacts are in percent (2.5, 5, 7.5);
+# (R/sensitivity.R). The sensitivity tools are kept working on the v0.4
+# layout; their redesign is on the roadmap. Supplement impacts are in percent (2.5, 5, 7.5);
 # reference values from inst/validation/reference_v020_tests.py,
 # reference_2022_shapley.py (multiplicative Shapley values) and
 # reference_v040.py (sections 6-8: unknown pairs, models without
@@ -13,7 +14,7 @@ t2_pop <- function() {
 t2_model <- function(values) cm_model(t2_pop(), cm_impacts(t2_ids, values))
 # Supplement population with culling hazard ratios 1.5, 2.0 and 1.3.
 t2_event <- function() {
-  cm_model(t2_pop(), cm_impacts(t2_ids, c(1.5, 2.0, 1.3), measure = "HR", estimand = "snapshot_crude"))
+  cm_model(t2_pop(), cm_impacts(t2_ids, c(1.5, 2.0, 1.3), measure = "HR"))
 }
 # The supplement without any association estimates.
 t2_no_assoc <- function(m = example_supplement()) {
@@ -29,30 +30,32 @@ supp_ar <- 0.03664898509534775             # attributable risk, event model at 0
 
 test_that("additive contributions add up to the aggregate", {
   m <- example_supplement()
-  res <- deconflate(m, method = "global")
+  res <- deconflate(m)
+  expect_equal(res$diagnostics$method, "pairwise shortcut")
   expect_equal(sum(res$contributions$total), res$totals$adjusted_total)
   expect_equal(res$totals$adjusted_total, supp_base_total, tolerance = 1e-8)
   expect_equal(attribute_burden(res), res$contributions)
   expect_error(attribute_burden(m), "deconflate")
   res_i <- deconflate(set_interaction(m, "d1", "d2", 1))
-  expect_equal(res_i$method, "global")
+  expect_equal(res_i$diagnostics$method, "full model")
+  expect_equal(res_i$adjusted$kind, c(rep("disease", 3), "interaction"))
+  expect_equal(res_i$adjusted$adjusted[4], 1)
   expect_equal(sum(res_i$contributions$total), res_i$totals$adjusted_total)
   expect_equal(res_i$totals$adjusted_total, supp_int_total, tolerance = 1e-8)
   P12 <- res_i$joint_pairs["d1", "d2"]
   expect_equal(res_i$totals$interaction_total, P12)
   expect_equal(res_i$contributions$interaction, c(0.5 * P12, 0.5 * P12, 0))
   expect_equal(res_i$totals$adjusted_total,
-               sum(c(0.10, 0.15, 0.20) * res_i$adjusted$adjusted) + P12, tolerance = 1e-12)
+               sum(c(0.10, 0.15, 0.20) * res_i$adjusted$adjusted[1:3]) + P12, tolerance = 1e-12)
 })
 
 test_that("cell-wise Shapley equals the closed form for pairwise interactions", {
   pop <- t2_pop()
-  ints <- cm_interactions("d1", "d2", 1)
-  m2 <- cm_model(pop, simulate_raw_impacts(pop, supp_truth, ints), ints)
+  m2 <- cm_model(pop, simulate_raw_impacts(pop, supp_truth, interactions = c("d1;d2" = 1)))
   res <- deconflate(m2)
-  expect_equal(res$adjusted$adjusted, unname(supp_truth), tolerance = 1e-8)
+  expect_equal(res$adjusted$adjusted, c(unname(supp_truth), 1), tolerance = 1e-8)
   closed <- attribute_burden(res)
-  adj <- stats::setNames(res$adjusted$adjusted, res$adjusted$disease)
+  adj <- stats::setNames(res$adjusted$adjusted[1:3], res$adjusted$disease[1:3])
   expect_silent(sh <- shapley_by_cell(res$joint,
                                       loss_additive(adj, list(list(diseases = c("d1", "d2"), value = 1)))))
   expect_equal(sh$disease, t2_ids)
@@ -126,29 +129,33 @@ test_that("association screening reports influential pairs", {
   expect_equal(nrow(sp), 2)
   expect_equal(attr(sp, "baseline_total"), supp_base_total, tolerance = 1e-10)
   expect_equal(sp$total[sp$scenario == "OR x 2"], 2.0128810813034628, tolerance = 1e-10)
-  # The global method gives the same totals (every pair is given).
-  sg <- screen_associations(example_supplement(), method = "global", pairs = "d3:d1")
-  expect_equal(sg$total, sp$total, tolerance = 1e-8)
+  # The same scenario adjusted directly.
+  d13 <- deconflate(set_association(example_supplement(), "d1", "d3", 2), n_draws = 0)
+  expect_equal(d13$totals$adjusted_total, 2.0128810813034628, tolerance = 1e-10)
+  # The method argument is gone.
+  expect_error(screen_associations(example_supplement(), method = "global"), "method")
   # The metric is always the adjusted aggregate: there is no valuation.
   expect_false("valuation" %in% names(formals(screen_associations)))
   expect_error(screen_associations(example_supplement(), pairs = "d1:d3",
                                    valuation = list(observed = 10000)),
-               "unused argument")
+               "Unknown argument: valuation")
 })
 
 test_that("association screening keeps failed scenarios with the reason", {
   m <- cm_model(cm_population(cm_diseases(t2_ids, c(0.10, 0.15, 0.20)),
                               cm_associations(c("d1", "d2"), c("d2", "d3"), c(0.3, 3),
-                                              measure = c("cond_prob", "OR"))),
+                                              measure = c("prevalence", "OR"))),
                 cm_impacts(t2_ids, c(2.5, 5, 7.5)))
-  sc <- screen_associations(m, multipliers = c(-1, 0.5, 4), pairs = c("d1:d2", "d2:d3"))
+  sc <- screen_associations(m, multipliers = c(-1, 0.5, 3), pairs = c("d1:d2", "d2:d3"))
   expect_equal(nrow(sc), 6)
   key <- paste(sc$pair, sc$scenario)
   failed <- stats::setNames(sc$failed, key)
-  # P(d1 | d2) = -0.3 or 1.2 is impossible; a negative odds ratio is invalid.
-  expect_equal(unname(failed[c("d1:d2 cond_prob x -1", "d1:d2 cond_prob x 4", "d2:d3 OR x -1")]),
-               c("infeasible", "infeasible", "invalid value"))
-  ok <- c("d1:d2 cond_prob x 0.5", "d2:d3 OR x 0.5", "d2:d3 OR x 4")
+  # A prevalence of -0.3 and a negative odds ratio are invalid values;
+  # P(d1 | d2) = 0.9 is a valid value but impossible with P(d1) = 0.10 and
+  # P(d2) = 0.15 (0.9 x 0.15 > 0.10).
+  expect_equal(unname(failed[c("d1:d2 prevalence x -1", "d1:d2 prevalence x 3", "d2:d3 OR x -1")]),
+               c("invalid value", "infeasible", "invalid value"))
+  ok <- c("d1:d2 prevalence x 0.5", "d2:d3 OR x 0.5", "d2:d3 OR x 3")
   expect_true(all(is.na(failed[ok])))
   expect_true(all(is.finite(sc$total[key %in% ok])))
   expect_true(all(is.na(sc$total[!is.na(sc$failed)])))
@@ -221,8 +228,9 @@ test_that("three-way terms change global results with interactions only", {
   expect_true(all(is.na(st$failed)))
   expect_lt(max(abs(st$rel_change)), 1e-7)
   tw <- set_three_way(base, "d1", "d2", "d3", 2)
-  expect_equal(deconflate(tw)$adjusted$adjusted,
-               deconflate(base, method = "simultaneous")$adjusted$adjusted, tolerance = 1e-7)
+  res_tw0 <- deconflate(tw)
+  expect_equal(res_tw0$diagnostics$method, "full model")
+  expect_equal(res_tw0$adjusted$adjusted, deconflate(base)$adjusted$adjusted, tolerance = 1e-7)
   # With an interaction, the probability of the triple matters.
   int <- set_interaction(base, "d1", "d2", 1)
   sti <- screen_three_way(int, ratios = c(0.5, 2), triples = list(c("d1", "d2", "d3")))
@@ -237,34 +245,59 @@ test_that("three-way terms change global results with interactions only", {
 test_that("set_three_way, set_interaction and set_association edit models", {
   base <- example_supplement()
   tw <- set_three_way(base, "d1", "d2", "d3", 2)
-  expect_s3_class(tw$three_way, "cm_three_way")
+  a <- tw$associations
+  expect_equal(nrow(a), 4)
+  expect_equal(a$measure[4], "OR_ratio")
+  expect_equal(c(a$disease[4], a$associated_with[4], a$among[4], a$source[4]), c("d1", "d2", "d3", "scenario"))
+  # The ratio is symmetric in the three diseases: the same row is replaced.
   tw2 <- set_three_way(tw, "d3", "d1", "d2", 0.5)
-  expect_equal(nrow(tw2$three_way), 1)
-  expect_equal(tw2$three_way$ratio, 0.5)
+  expect_equal(nrow(tw2$associations), 4)
+  expect_equal(tw2$associations$value[4], 0.5)
+  expect_equal(tw2$associations$row, 1:4)
   expect_error(set_three_way(base, "d1", "d2", "zz", 2), "Unknown diseases")
   expect_error(set_three_way(base, "d1", "d2", "d3", -1), "positive")
+  expect_error(set_three_way(base, "d1", "d2", "d1", 2), "three different")
   pop_tw <- set_three_way(t2_pop(), "d1", "d2", "d3", 2)
   expect_s3_class(pop_tw, "cm_population")
 
   wi <- set_interaction(base, "d1", "d2", 1)
-  expect_equal(nrow(wi$interactions), 1)
+  expect_equal(nrow(wi$impacts), 4)
+  expect_equal(c(wi$impacts$disease[4], wi$impacts$adjusted_for[4]), c("d1;d2", "all"))
   wi2 <- set_interaction(wi, "d2", "d1", 2)
-  expect_equal(nrow(wi2$interactions), 1)
-  expect_equal(wi2$interactions$value, 2)
+  expect_equal(nrow(wi2$impacts), 4)
+  expect_equal(wi2$impacts$value[4], 2)
   wi3 <- set_interaction(wi2, "d2", "d3", 0.5)
-  expect_equal(nrow(wi3$interactions), 2)
+  expect_equal(nrow(wi3$impacts), 5)
+  expect_equal(wi3$impacts$disease[5], "d2;d3")
+  expect_equal(deconflate(wi3, n_draws = 0)$adjusted$adjusted[4:5], c(2, 0.5), tolerance = 1e-8)
   expect_error(set_interaction(t2_pop(), "d1", "d2", 1), "cm_model")
   expect_error(set_interaction(base, "d1", "zz", 1), "Unknown diseases")
+  expect_error(set_interaction(base, "d1", "d1", 1), "two different")
   expect_error(set_association(base, "zz", "d1", 2), "Unknown diseases")
 
   alt <- set_association(base, "d3", "d1", 2)
   a <- alt$associations
   expect_equal(nrow(a), 3)
-  expect_equal(a$value[pair_key(a$disease1, a$disease2) == "d1|d3"], 2)
-  expect_equal(a$source[pair_key(a$disease1, a$disease2) == "d1|d3"], "scenario")
+  hit <- pair_row_hits(a, "d1", "d3")
+  expect_equal(sum(hit), 1)
+  expect_equal(a$value[hit], 2)
+  expect_equal(a$source[hit], "scenario")
+  expect_equal(a$row, 1:3)
   new_pop <- set_association(cm_population(cm_diseases(t2_ids, c(0.1, 0.15, 0.2))), "d1", "d2", 2)
   expect_equal(nrow(new_pop$associations), 1)
   expect_equal(pair_tables(new_pop)$status, c("specified", "unknown", "unknown"))
+  # Several crude rows of a pair are replaced by one; rows within subgroups
+  # are kept, and the distributions of replaced rows are dropped.
+  m <- read_five()
+  lm <- m$associations$row[pair_row_hits(m$associations, "LAM", "MAS")]
+  expect_length(lm, 2)
+  m2 <- set_association(m, "MAS", "LAM", 3)
+  hit <- pair_row_hits(m2$associations, "LAM", "MAS")
+  expect_equal(sum(hit), 1)
+  expect_equal(m2$associations$value[hit], 3)
+  expect_equal(nrow(m2$associations), nrow(m$associations) - 1)
+  expect_true("OR_ratio" %in% m2$associations$measure)
+  expect_false(any(paste0("associations:", lm) %in% names(m2$distributions)))
   # Retired measures cannot be set.
   expect_error(set_association(base, "d1", "d3", 1, measure = "independent"), class = "deconflate_unsupported")
 })
@@ -274,13 +307,13 @@ test_that("one-at-a-time sensitivity varies every input", {
   expect_s3_class(oat, "cm_oat")
   expect_equal(names(oat), c("input", "value", "total_low", "total_high", "swing", "rel_swing"))
   expect_equal(nrow(oat), 9)
-  expect_setequal(oat$input, c("prob:d1", "prob:d2", "prob:d3", "assoc:d1:d2", "assoc:d1:d3",
-                               "assoc:d2:d3", "impact:d1", "impact:d2", "impact:d3"))
+  expect_setequal(oat$input, c("prob:d1", "prob:d2", "prob:d3", "associations:1", "associations:2",
+                               "associations:3", "impacts:1", "impacts:2", "impacts:3"))
   expect_true(all(oat$swing >= 0))
   expect_true(all(diff(oat$swing) <= 0))
   expect_equal(attr(oat, "baseline_total"), supp_base_total, tolerance = 1e-10)
   expect_equal(attr(oat, "metric"), "aggregate")
-  imp <- oat[grepl("^impact:", oat$input), ]
+  imp <- oat[grepl("^impacts:", oat$input), ]
   expect_true(all(imp$total_high > imp$total_low))
   # The aggregate is linear in the impacts: low and high are symmetric.
   expect_equal((imp$total_low + imp$total_high) / 2, rep(supp_base_total, 3), tolerance = 1e-10)
@@ -291,10 +324,11 @@ test_that("one-at-a-time sensitivity varies every input", {
   expect_equal(nrow(sensitivity_oat(example_supplement(), inputs = "risk")), 0)
   expect_error(sensitivity_oat(example_supplement(), inputs = "impact",
                                valuation = list(observed = 10000)),
-               "unused argument")
+               "Unknown argument: valuation")
+  expect_error(sensitivity_oat(example_supplement(), method = "global"), "method")
 })
 
-test_that("with unknown pairs the screens use the global method automatically", {
+test_that("with unknown pairs the screens fit the full model", {
   m <- cm_model(cm_diseases(c("a", "b", "c"), c(0.2, 0.3, 0.25)),
                 cm_impacts(c("a", "b", "c"), c(3, 4, 5)),
                 associations = cm_associations(c("a", "b"), c("b", "c"), c(3, 2)))
@@ -308,12 +342,12 @@ test_that("with unknown pairs the screens use the global method automatically", 
   # A scenario that gives the unknown pair an odds ratio is adjusted as
   # deconflate() would (here: every pair given, so simultaneous).
   ac2 <- deconflate(set_association(m, "a", "c", 2))
-  expect_equal(ac2$method, "simultaneous")
+  expect_equal(ac2$diagnostics$method, "pairwise shortcut")
   expect_equal(sc$total[sc$pair == "a:c" & sc$scenario == "OR = 2"], ac2$totals$adjusted_total,
                tolerance = 1e-8)
   oat <- sensitivity_oat(m)
-  expect_setequal(oat$input, c("prob:a", "prob:b", "prob:c", "assoc:a:b", "assoc:b:c",
-                               "impact:a", "impact:b", "impact:c"))
+  expect_setequal(oat$input, c("prob:a", "prob:b", "prob:c", "associations:1", "associations:2",
+                               "impacts:1", "impacts:2", "impacts:3"))
   expect_equal(attr(oat, "baseline_total"), 2.4364966316833225, tolerance = 1e-9)
 })
 
@@ -342,7 +376,7 @@ test_that("the screens run without any association: the baseline is the raw impa
   oat <- sensitivity_oat(m0)
   expect_equal(nrow(oat), 6)
   sw <- stats::setNames(oat$swing, oat$input)
-  expect_equal(unname(sw[c("impact:d1", "impact:d2", "impact:d3")]), c(0.1, 0.3, 0.6), tolerance = 1e-8)
+  expect_equal(unname(sw[c("impacts:1", "impacts:2", "impacts:3")]), c(0.1, 0.3, 0.6), tolerance = 1e-8)
   expect_equal(unname(sw[c("prob:d1", "prob:d2", "prob:d3")]), c(0.1, 0.3, 0.6), tolerance = 1e-8)
 })
 
@@ -369,7 +403,7 @@ test_that("event models: the screens use the attributable risk", {
   # One-at-a-time, with the overall risk as an input.
   oat <- sensitivity_oat(ev, event_model = TRUE, overall_risk = 0.25, inputs = c("impact", "risk"))
   expect_equal(attr(oat, "metric"), "attributable risk")
-  expect_setequal(oat$input, c("impact:d1", "impact:d2", "impact:d3", "risk"))
+  expect_setequal(oat$input, c("impacts:1", "impacts:2", "impacts:3", "risk"))
   r <- oat[oat$input == "risk", ]
   expect_equal(r$value, 0.25)
   expect_equal(c(r$total_low, r$total_high), c(0.030686662060154746, 0.041864593971753294), tolerance = 1e-8)
@@ -382,7 +416,7 @@ test_that("event models: the screens use the attributable risk", {
 test_that("event models without associations: the baseline hazard ratios are the raw ones", {
   ev0 <- t2_no_assoc(t2_event())
   expect_error(deconflate(ev0, event_model = TRUE, overall_risk = 0.25), class = "deconflate_unsupported")
-  base <- adjust_event(ev0, overall_risk = 0.25)
+  base <- adjust_event(ev0, overall_risk = 0.25, joint = fit_joint(as_population(ev0)))
   expect_equal(base$adjusted$adjusted, c(1.5, 2.0, 1.3), tolerance = 1e-9)
   sc <- screen_associations(ev0, event_model = TRUE, overall_risk = 0.25, pairs = c("d1:d2", "d2:d3"))
   expect_equal(attr(sc, "baseline_total"), 0.04539536116776455, tolerance = 1e-8)

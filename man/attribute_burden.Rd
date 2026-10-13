@@ -17,7 +17,8 @@ and its share.
 }
 \description{
 The expected aggregate impact is
-\verb{sum_i p_i b_i + sum_\{j < k\} delta[j, k] P(j and k)}. Removing any disease
+\verb{sum_i p_i b_i + sum_T delta_T P(all of T)} over the interaction terms
+\code{T} (combinations of two or more diseases). Removing any disease
 involved in a term removes that term, so each disease's Shapley value is
 its own term plus an equal share of every interaction term it is involved
 in. The shares add up to the aggregate. This is the \code{contributions} table

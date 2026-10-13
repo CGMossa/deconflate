@@ -7,35 +7,32 @@
 cm_model(
   population,
   impacts = NULL,
-  interactions = NULL,
   associations = NULL,
-  three_way = NULL,
-  adjusted_associations = c("error", "use_as_marginal"),
-  distributions = NULL
+  distributions = NULL,
+  ...
 )
 }
 \arguments{
 \item{population}{A \code{\link[=cm_population]{cm_population()}}. For convenience, a \code{\link[=cm_diseases]{cm_diseases()}}
-object can be given instead, together with \code{associations} and
-\code{three_way}.}
+object can be given instead, together with \code{associations}.}
 
-\item{impacts}{A \code{\link[=cm_impacts]{cm_impacts()}} object with one value per disease.}
+\item{impacts}{A \code{\link[=cm_impacts]{cm_impacts()}} object.}
 
-\item{interactions}{Optional \code{\link[=cm_interactions]{cm_interactions()}} object (additive impacts
-only).}
-
-\item{associations, three_way, adjusted_associations}{Used only when
-\code{population} is a \code{\link[=cm_diseases]{cm_diseases()}} object; see \code{\link[=cm_population]{cm_population()}}.}
+\item{associations}{Used only when \code{population} is a \code{\link[=cm_diseases]{cm_diseases()}}
+object; see \code{\link[=cm_population]{cm_population()}}.}
 
 \item{distributions}{Optional named list of distributions (\link{distributions})
 for uncertain inputs, used when \code{\link[=deconflate]{deconflate()}} runs draws. Names are
 keys: \code{"prob:<disease>"} (the disease's \code{value}, on the scale it was
-entered), \code{"assoc:<d1>:<d2>"} (the association, on its own measure),
-\code{"three:<d1>:<d2>:<d3>"}, \code{"impact:<disease>"} and \code{"inter:<d1>:<d2>"}.
-\code{\link[=cm_read_inputs]{cm_read_inputs()}} fills this in from the \code{dist} columns of the tables;
-\code{\link[=cm_dist_table]{cm_dist_table()}} builds it from a table of keys. When \code{population} is a
+entered), \code{"associations:<row>"} and \code{"impacts:<row>"} (a row of those
+tables, by its number in \code{row}). For convenience, \code{"assoc:<d1>:<d2>"}
+names the crude row of a pair and \code{"impact:<id>"} the row of a disease
+or combination, when there is exactly one. \code{\link[=cm_read_inputs]{cm_read_inputs()}} fills
+this in from the \code{dist} columns of the tables. When \code{population} is a
 model and \code{distributions} is not given, its distributions are kept,
-except those of impacts or interactions that are replaced.}
+except those of impacts that are replaced.}
+
+\item{...}{Not used (arguments of earlier versions give a message).}
 }
 \value{
 A \code{cm_model} object (which is also a \code{cm_population}).

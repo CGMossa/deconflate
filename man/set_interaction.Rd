@@ -14,9 +14,10 @@ set_interaction(model, disease1, disease2, value)
 \item{value}{Interaction value (same units as the impacts).}
 }
 \value{
-The modified model. A distribution of the pair's interaction in
-the model's \code{distributions} is dropped (the scenario value is fixed).
+The modified model. Distributions of replaced rows are dropped.
 }
 \description{
-Set or replace one pairwise interaction
+Sets the interaction of two diseases to \code{value} (in the units of the
+impacts): a row for the combination adjusted for \code{all}, which is the
+interaction itself (see \code{\link[=cm_impacts]{cm_impacts()}}). Replaces such a row if present.
 }

@@ -23,15 +23,15 @@ Thirteen endemic diseases and conditions of UK dairy cattle, with cow-level
 prevalence (Table 2), inter-disease odds ratios (Table 3), and the raw
 impacts of one outcome: milk yield (Table 4, \% decrease), calving interval
 (Table 5, \% increase) or culling (Table 6, hazard ratios, as event impacts
-with estimand \code{"snapshot_crude"}, an assumption; use
+(crude snapshot comparisons, an assumption); use
 \code{deconflate(..., event_model = TRUE, overall_risk = 0.27)}, the annual
 culling rate of the paper). Use \code{\link[=reproduce_rasmussen_2022]{reproduce_rasmussen_2022()}} for the
 published tables, including the economic values.
 }
 \details{
-Pairs not in Table 3 are unknown, as for any input in this package, so
-\code{\link[=deconflate]{deconflate()}} uses the global method. The paper treated them as
-independent; \code{\link[=reproduce_rasmussen_2022]{reproduce_rasmussen_2022()}} does the same. The paper
+Pairs not in Table 3 are unknown, as for any input in this package: the
+model fills them in. The paper treated them as independent;
+\code{\link[=reproduce_rasmussen_2022]{reproduce_rasmussen_2022()}} does the same. The paper
 converted the hazard ratios to excess annual culling risks by treating
 them as odds ratios; that historical calculation is only available inside
 \code{\link[=reproduce_rasmussen_2022]{reproduce_rasmussen_2022()}}.

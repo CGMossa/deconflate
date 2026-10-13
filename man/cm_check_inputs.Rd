@@ -4,22 +4,15 @@
 \alias{cm_check_inputs}
 \title{Check model input tables}
 \usage{
-cm_check_inputs(
-  diseases = NULL,
-  associations = NULL,
-  impacts = NULL,
-  interactions = NULL,
-  three_way = NULL,
-  adjusted_associations = c("error", "use_as_marginal")
-)
+cm_check_inputs(diseases = NULL, associations = NULL, impacts = NULL, ...)
 }
 \arguments{
-\item{diseases, associations, impacts, interactions, three_way}{Paths to CSV
-files (any names) or data frames. \code{diseases} and \code{impacts} are required;
-\code{associations} can be left out only for the sensitivity tools
-(\code{\link[=deconflate]{deconflate()}} needs at least one association).}
+\item{diseases, associations, impacts}{Paths to CSV files (any names) or
+data frames. \code{diseases} and \code{impacts} are required; \code{associations} can
+be left out only for the sensitivity tools (\code{\link[=deconflate]{deconflate()}} needs at
+least one association).}
 
-\item{adjusted_associations}{Passed to \code{\link[=cm_population]{cm_population()}}.}
+\item{...}{Not used (arguments of earlier versions give a message).}
 }
 \value{
 A data frame (class \code{cm_problems}) with \code{table}, \code{row}, \code{column},
@@ -32,7 +25,7 @@ without stopping.
 }
 \examples{
 cm_check_inputs(
-  diseases = data.frame(id = c("d1", "d2"), value = c(0.10, 1.5)),
+  diseases = data.frame(disease = c("d1", "d2"), value = c(0.10, 1.5)),
   impacts = data.frame(disease = c("d1", "d3"), value = c(2, "x"))
 )
 }

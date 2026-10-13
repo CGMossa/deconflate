@@ -62,7 +62,10 @@ check_ids <- function(id) {
     cm_abort(sprintf("Disease ids must not contain '|', ';' or ':' or surrounding spaces (check: %s).",
                      paste(id[bad], collapse = ", ")))
   }
-  if (any(tolower(id) == "all")) cm_abort("'all' is reserved and cannot be a disease id.")
+  if (any(tolower(id) %in% c("all", "others"))) cm_abort("'all' and 'others' are reserved and cannot be disease ids.")
+  if (any(grepl("^no\\s", id, ignore.case = TRUE))) {
+    cm_abort("Disease ids must not start with 'no ' (it marks absent diseases in `among`).")
+  }
   invisible(id)
 }
 

@@ -15,9 +15,9 @@ knitr::opts_chunk$set(collapse = TRUE, comment = "#>")
 library(deconflate)
 ```
 
-Any input can be uncertain: a disease probability, an association, a
-three-way term, an impact, an interaction, and, for event impacts, the
-overall risk. `deconflate()` draws the uncertain inputs from their
+Any input can be uncertain: a disease probability, an association row, an
+impact row (including interactions), and, for event impacts, the overall
+risk. `deconflate()` draws the uncertain inputs from their
 distributions, adjusts each draw in the same way as the central estimate,
 and reports intervals. Monte Carlo runs are part of `deconflate()`
 (`n_draws`).
@@ -43,9 +43,11 @@ In input tables, an uncertain value gets its distribution in its own row,
 in the columns `dist` and `p1`-`p4`, and `cm_read_inputs()` keeps it in the
 model (see `vignette("own-data")`). In R, give them to `cm_model()` as
 `distributions`, a named list whose names are keys: `prob:<disease>`,
-`assoc:<d1>:<d2>`, `three:<d1>:<d2>:<d3>`, `impact:<disease>` and
-`inter:<d1>:<d2>`. Inputs without a distribution keep their point value in
-every draw.
+`associations:<row>` and `impacts:<row>` (rows numbered from 1 in each
+table). Shorter keys name the usual rows: `assoc:<d1>:<d2>` (a pair's crude
+row), `impact:<disease>` (a disease's row), `inter:<d1>:<d2>` (an
+interaction adjusted for all) and `three:<d1>:<d2>:<d3>` (an `OR_ratio`
+row). Inputs without a distribution keep their point value in every draw.
 
 ```{r}
 m <- example_supplement()
@@ -173,6 +175,34 @@ data.frame(quantity = r$draws$summary$quantity,
            mcse_lhs = r_lhs$draws$summary$mcse)
 ```
 
+## Several rows for one item
+
+When several association rows are pooled (see `vignette("interactions")`),
+each draw draws every row from its own distribution and pools the drawn
+values with the weights of the central estimate. With random effects
+(the default), the draw also adds the between-study spread: a standard
+normal draw times tau, on the log scale, listed among the drawn inputs as
+`between:associations:<rows>`. Impact rows that over-determine the impacts are fitted in
+each draw by weighted least squares, with the weights of the central
+estimate. Here two studies of the d1:d2 odds ratio disagree (I^2 above
+90%):
+
+```{r}
+a2 <- cm_associations(c("d1", "d1", "d1", "d2"), c("d2", "d2", "d3", "d3"), c(1.8, 4, 1, 3))
+m2 <- cm_model(m$diseases, m$impacts, associations = a2,
+               distributions = list("associations:1" = dist_lognormal_ci(1.8, 1.3, 2.5),
+                                    "associations:2" = dist_lognormal_ci(4, 3.4, 4.7)))
+r2 <- deconflate(m2, n_draws = 200, seed = 1)
+r2$heterogeneity
+grep("between", names(r2$draws$specs), value = TRUE)
+r2_fixed <- deconflate(m2, n_draws = 200, seed = 1, pool = "fixed")
+rbind(random = unlist(r2$totals[c("adjusted_total", "adjusted_total_lower", "adjusted_total_upper")]),
+      fixed = unlist(r2_fixed$totals[c("adjusted_total", "adjusted_total_lower", "adjusted_total_upper")]))
+```
+
+The fixed-effect interval is narrower: it treats the two studies as
+estimates of one value, which their disagreement contradicts.
+
 ## Event impacts: the overall risk
 
 For event impacts (`vignette("event-impacts")`), the impacts can have
@@ -181,8 +211,7 @@ distribution too. The central estimate uses the mean of that distribution:
 
 ```{r}
 cull <- cm_model(m, cm_impacts(c("d1", "d2", "d3"), c(1.5, 2.0, 1.2),
-                               measure = c("HR", "HR", "RR"),
-                               estimand = "snapshot_crude", label = "culling"))
+                               measure = c("HR", "HR", "RR"), label = "culling"))
 e <- deconflate(cull, event_model = TRUE, overall_risk = dist_beta(250, 750),
                 n_draws = 200, seed = 1)
 e
@@ -200,15 +229,14 @@ only the risk ratio of d3 does.
 approximation of Rasmussen et al. (2022, eq. 16) (`"published"`), kept for
 comparison with earlier analyses only. With `n_draws` (default 0), every
 method is applied to the same draws; a draw is rejected if any method fails
-on it. There is no automatic switch of method here: methods that cannot be
-run are listed in `$failed`.
+on it. Methods that cannot be run are listed in `$failed`.
 
 ```{r}
 mu2 <- cm_model(m, m$impacts, distributions = list(
   "assoc:d1:d2" = dist_lognormal_ci(2, 1.4, 2.9),
   "impact:d2" = dist_normal(5, 1)
 ))
-cmp <- compare_methods(mu2, methods = c("published", "simultaneous"), n_draws = 200, seed = 1)
+cmp <- compare_methods(mu2, n_draws = 200, seed = 1)
 cmp
 s <- cmp$draws$summary
 s[s$quantity == "adjusted:d2", c("method", "mean", "lower", "upper")]
@@ -240,7 +268,7 @@ The central gap uses the central total:
 ## Sensitivity
 
 The sensitivity tools give point estimates (they do not run draws), and
-choose the method as `deconflate()` does. They also accept
+adjust each scenario as `deconflate()` does. They also accept
 `event_model = TRUE` with `overall_risk`. One-at-a-time sensitivity (as in
 Rasmussen et al. 2024, Fig. 7):
 

@@ -5,69 +5,64 @@
 # of an event model) by drawing input sets, adjusting each, and summarising
 # the results over the accepted draws.
 
-# The distributions to draw from: the model's, plus the overall risk ("risk").
-draw_specs <- function(model, risk_dist = NULL) {
+# The distributions to draw from: the model's, the overall risk ("risk"),
+# and a standard normal between-study deviate ("between:associations:<rows>",
+# e.g. "between:associations:1,2") for each pooled group of association rows
+# with a random-effects term.
+draw_specs <- function(model, risk_dist = NULL, frozen = NULL) {
   specs <- model$distributions %||% list()
   if (!is.null(risk_dist)) specs[["risk"]] <- risk_dist
+  for (g in names(frozen)) {
+    if (isTRUE(frozen[[g]]$extra_sd > 0)) specs[[paste0("between:", between_key(frozen[[g]]$rows))]] <- dist_normal(0, 1)
+  }
   specs
 }
 
-# Set inputs of a model to the given values (named by key, as in
-# cm_model(distributions = )). Impossible values (a probability outside
-# (0, 1), a non-positive ratio, ...) stop with class deconflate_infeasible.
+# Set inputs of a model to the given values (named by canonical key, see
+# canonical_key()). Impossible values (a probability outside (0, 1), a
+# non-positive ratio, ...) stop with class deconflate_infeasible.
 set_inputs <- function(model, values) {
   for (k in names(values)) {
     x <- values[[k]]
     if (!is.finite(x)) cm_abort(sprintf("Draw %s is not finite.", k), class = "deconflate_infeasible")
+    if (startsWith(k, "between:")) {
+      model$between[[substring(k, 9L)]] <- x
+      next
+    }
+    if (!grepl("^(prob|associations|impacts):", k)) k <- canonical_key(k, model)
     parts <- strsplit(k, ":", fixed = TRUE)[[1]]
     invalid <- function(what) {
       cm_abort(sprintf("%s = %g is not a valid %s.", k, x, what), class = "deconflate_infeasible")
     }
     switch(parts[1],
       prob = {
-        r <- match(parts[2], model$diseases$id)
+        r <- match(parts[2], model$diseases$disease)
         if (is.na(r)) cm_abort(sprintf("Unknown disease in '%s'.", k))
-        type <- model$diseases$type[r]
-        prob <- if (type == "incidence_rate") 1 - exp(-x) else x
+        prob <- if (model$diseases$measure[r] == "incidence_rate") 1 - exp(-x) else x
         if (x < 0 || prob <= 0 || prob >= 1) invalid("disease value (it gives a probability outside (0, 1))")
         model$diseases$value[r] <- x
         model$diseases$prob[r] <- prob
       },
-      assoc = {
+      associations = {
         a <- model$associations
-        r <- if (is.null(a)) NA_integer_ else match(pair_key(parts[2], parts[3]), pair_key(a$disease1, a$disease2))
+        r <- if (is.null(a)) NA_integer_ else match(as.integer(parts[2]), a$row)
         if (is.na(r)) cm_abort(sprintf("No association row for '%s'.", k))
         meas <- a$measure[r]
-        ok <- switch(meas, OR = , RR = x > 0, cond_prob = x >= 0 && x <= 1,
+        ok <- switch(meas, OR = , RR = , OR_ratio = x > 0, prevalence = x > 0 && x < 1,
                      RD = , phi = x >= -1 && x <= 1, TRUE)
         if (!ok) invalid(meas)
         model$associations$value[r] <- x
       },
-      impact = {
+      impacts = {
         im <- model$impacts
-        r <- match(parts[2], im$disease)
+        r <- if (is.null(im)) NA_integer_ else match(as.integer(parts[2]), im$row)
         if (is.na(r)) cm_abort(sprintf("No impact row for '%s'.", k))
-        meas <- if (is.null(im$measure)) NA_character_ else im$measure[r]
+        meas <- im$measure[r]
         if (!is.na(meas)) {
           if (meas == "RD" && (x <= -1 || x >= 1)) invalid("risk difference")
           if (meas != "RD" && x <= 0) invalid(meas)
         }
         model$impacts$value[r] <- x
-      },
-      inter = {
-        it <- model$interactions
-        r <- if (is.null(it)) NA_integer_ else match(pair_key(parts[2], parts[3]), pair_key(it$disease1, it$disease2))
-        if (is.na(r)) cm_abort(sprintf("No interaction row for '%s'.", k))
-        model$interactions$value[r] <- x
-      },
-      three = {
-        tw <- model$three_way
-        tkey <- if (is.null(tw) || !nrow(tw)) character(0) else
-          apply(tw[, c("disease1", "disease2", "disease3")], 1, function(z) paste(sort(z), collapse = "|"))
-        r <- match(paste(sort(parts[2:4]), collapse = "|"), tkey)
-        if (is.na(r)) cm_abort(sprintf("No three-way row for '%s'.", k))
-        if (x <= 0) invalid("ratio (it must be positive)")
-        model$three_way$ratio[r] <- x
       },
       cm_abort(sprintf("Unknown input key '%s'.", k))
     )
@@ -181,12 +176,14 @@ summarise_draws <- function(dr, level = 0.95) {
 }
 
 # Rows of a result's draw summary for one kind of quantity ("adjusted",
-# "contribution", "total", ...), in disease order where it applies.
+# "contribution", "total", ...), in the order of the result's tables.
 draw_rows <- function(x, kind, method = NULL) {
   s <- x$draws$summary
   pre <- if (is.null(method)) "" else paste0(method, "|")
-  if (kind %in% c("adjusted", "contribution")) {
-    ids <- x$adjusted$disease
+  if (kind == "adjusted") {
+    s[match(paste0(pre, kind, ":", x$adjusted$disease), s$quantity), , drop = FALSE]
+  } else if (kind == "contribution") {
+    ids <- if (inherits(x, "cm_event_result")) x$attributable$by_disease$disease else x$contributions$disease
     s[match(paste0(pre, kind, ":", ids), s$quantity), , drop = FALSE]
   } else {
     s[match(paste0(pre, kind), s$quantity), , drop = FALSE]
@@ -195,33 +192,35 @@ draw_rows <- function(x, kind, method = NULL) {
 
 # Quantities of one adjusted result, for the draws.
 result_quantities <- function(r, prefix = "") {
-  ids <- r$adjusted$disease
+  terms <- r$adjusted$disease
   if (inherits(r, "cm_event_result")) {
     ar <- r$attributable
-    q <- c(stats::setNames(r$adjusted$adjusted, paste0(prefix, "adjusted:", ids)),
+    q <- c(stats::setNames(r$adjusted$adjusted, paste0(prefix, "adjusted:", terms)),
            stats::setNames(ar$summary$attributable, paste0(prefix, "total")),
            stats::setNames(ar$summary$attributable_fraction, paste0(prefix, "fraction")))
     if (!is.null(ar$by_disease)) {
-      q <- c(q, stats::setNames(ar$by_disease$attributable, paste0(prefix, "contribution:", ids)))
+      q <- c(q, stats::setNames(ar$by_disease$attributable, paste0(prefix, "contribution:", ar$by_disease$disease)))
     }
     return(q)
   }
-  c(stats::setNames(r$adjusted$adjusted, paste0(prefix, "adjusted:", ids)),
-    stats::setNames(r$contributions$total, paste0(prefix, "contribution:", ids)),
-    stats::setNames(r$totals$adjusted_total, paste0(prefix, "total")),
-    stats::setNames(r$totals$raw_sum, paste0(prefix, "raw_sum")))
+  q <- c(stats::setNames(r$adjusted$adjusted, paste0(prefix, "adjusted:", terms)),
+         stats::setNames(r$contributions$total, paste0(prefix, "contribution:", r$contributions$disease)),
+         stats::setNames(r$totals$adjusted_total, paste0(prefix, "total")))
+  if (is.finite(r$totals$raw_sum)) q <- c(q, stats::setNames(r$totals$raw_sum, paste0(prefix, "raw_sum")))
+  q
 }
 
 # Draws for a deconflate() result: every draw is adjusted the same way as the
-# central result, starting from its joint distribution and solution.
+# central result, starting from its joint distribution and solution, with
+# the pooling weights and impact-row SDs of the central estimate.
 deconflate_draws <- function(model, specs, plan, central, risk, n_draws, seed, sampling,
-                             lhs_replicates, feasibility, dots) {
+                             lhs_replicates, dots) {
   joint_start <- if (!is.null(central$joint) && identical(central$joint$backend, "exact")) central$joint
   beta_start <- if (inherits(central, "cm_event_result")) log(central$adjusted$adjusted)
+  frozen <- list(associations = central$pooling$frozen, impacts = central$row_se)
   evaluate <- function(m, r) {
-    res <- run_point(m, plan, risk = r %||% risk, joint = NULL, warn = FALSE,
-                     feasibility = feasibility, dots = dots, joint_start = joint_start,
-                     start = beta_start)
+    res <- run_point(m, plan, risk = r %||% risk, joint = NULL, warn = FALSE, dots = dots,
+                     joint_start = joint_start, start = beta_start, frozen = frozen)
     result_quantities(res)
   }
   dr <- run_draws(model, specs, n_draws, seed, sampling, lhs_replicates, evaluate)

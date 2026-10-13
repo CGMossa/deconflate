@@ -2,63 +2,89 @@
 % Please edit documentation in R/inputs.R
 \name{cm_associations}
 \alias{cm_associations}
-\title{Describe statistical associations between disease pairs}
+\title{Describe associations between diseases}
 \usage{
 cm_associations(
-  disease1,
-  disease2,
+  disease,
+  associated_with = NA_character_,
   value,
   measure = "OR",
-  adjusted = FALSE,
+  ...,
+  among = NA_character_,
   adjusted_for = NA_character_,
-  source = NA_character_
+  study = NA_character_,
+  source = NA_character_,
+  note = NA_character_
 )
 }
 \arguments{
-\item{disease1, disease2}{Character vectors of disease ids.}
+\item{disease, associated_with}{Disease ids or combinations (\code{"a;b"}).}
 
 \item{value}{Numeric association values (required).}
 
-\item{measure}{Character, one per row (or recycled). Directional measures
-treat \code{disease1} as the outcome and \code{disease2} as the conditioning
-disease:
-\itemize{
-\item \code{"OR"} (default): odds ratio (symmetric). An odds ratio of 1 means the
-two diseases are independent.
-\item \code{"RR"}: risk ratio \verb{P(d1 | d2) / P(d1 | not d2)}.
-\item \code{"RD"}: risk difference \verb{P(d1 | d2) - P(d1 | not d2)}.
-\item \code{"cond_prob"}: conditional probability \code{P(d1 | d2)}.
-\item \code{"phi"}: binary (phi) correlation coefficient (symmetric).
-}
+\item{measure}{Character, one per row or recycled (see What a row means).}
 
-For a study's 2x2 table, compute its odds ratio,
-\code{n11 * n00 / (n10 * n01)}, and enter it as an odds ratio.}
+\item{...}{Not used (arguments of earlier versions give a message). The
+arguments after it must be named.}
 
-\item{adjusted}{Logical: was the measure adjusted for covariates (e.g. an
-odds ratio from multivariable logistic regression)? The 2x2 algebra needs
-marginal (crude) measures, so \code{\link[=cm_population]{cm_population()}} rejects adjusted measures
-unless told to use them as marginal.}
+\item{among}{Optional subgroups (see What a row means).}
 
-\item{adjusted_for}{Optional description of the adjustment set.}
+\item{adjusted_for}{Optional adjustment sets (see What a row means).}
 
-\item{source}{Optional citation.}
+\item{study, source, note}{Optional study label (used in diagnostics),
+citation and free-text note.}
 }
 \value{
-A \code{cm_associations} data frame.
+A \code{cm_associations} data frame (with the row number of each row
+in column \code{row}).
 }
 \description{
-Each row gives one association measure for one pair of diseases. A pair
-without a row is unknown: the global model (\code{\link[=fit_joint]{fit_joint()}}) fills in its
-association from the others (see \code{\link[=deconflate]{deconflate()}}). To state that two
-diseases are unrelated, give the pair an odds ratio of 1.
+Each row is one estimate from a study: an association between two
+diseases, or between combinations of diseases, possibly within a subgroup
+or adjusted for other diseases. Several rows can describe the same
+association (they are pooled). Pairs that no row mentions are unknown: the
+model fills in their association from the others (see \code{\link[=deconflate]{deconflate()}}). To
+state that two diseases are unrelated, give the pair an odds ratio of 1.
 }
-\details{
-Odds ratios (and the other measures) are applied to the modelled
-population's own marginal probabilities ("transported"). This assumes the
-measure is the same in the source study and in the modelled population.
+\section{What a row means}{
+
+\code{disease} (G) is the outcome and \code{associated_with} (H) the comparison:
+animals with all of H against animals with none of H (for one disease,
+with against without). Each can be one disease or a combination, with ids
+separated by \code{";"} (e.g. \code{"MAS;SCK"}). \code{among} narrows the population to a
+subgroup: ids that are present (\code{"SCK"}), absent (\code{"no SCK"}), both
+(\code{"SCK;no MET"}), or \code{"no others"} (none of the diseases not named in the
+row).
+\itemize{
+\item \code{"OR"} (default), \code{"RR"}, \code{"RD"}, \code{"phi"}: odds ratio, risk ratio
+\verb{P(G | H) / P(G | no H)}, risk difference and phi correlation of the
+2x2 table of G by H, within \code{among}.
+\item \code{"prevalence"}: \code{P(G | H)} within \code{among}; without \code{associated_with},
+the prevalence of G (a combination, or a disease within a subgroup).
+The prevalence of one disease in the whole population belongs in
+\code{\link[=cm_diseases]{cm_diseases()}}.
+\item \code{"OR_ratio"}: the odds ratio of G and H among \code{among} divided by their
+odds ratio among the complement of \code{among} (one disease, present or
+absent): how much a third disease changes an association, as a study
+that reports stratum-specific odds ratios would give it.
 }
+
+\code{adjusted_for}: an odds ratio adjusted for other diseases of the model
+(ids separated by \code{";"}, or \code{"all"} for every other disease), from a
+logistic regression of G on H and those diseases, is an exact conditional
+association and is used as such (G and H must be single diseases). Names
+that are not diseases of the model (e.g. \code{"parity"}) are factors outside
+the model: they are ignored, with a note, and a row adjusted only for them
+is used as a crude association.
+
+Measures are applied to the modelled population's own probabilities
+("transported"): this assumes the measure is the same in the source study
+and in the modelled population.
+}
+
 \examples{
-cm_associations(c("d1", "d2"), c("d2", "d3"), c(2, 3), measure = "OR")
-# Two diseases stated to be unrelated
-cm_associations("d1", "d3", 1)
+cm_associations(c("d1", "d2"), c("d2", "d3"), c(2, 3))
+# An odds ratio within a subgroup, and how much d3 changes it
+cm_associations(c("d1", "d1"), c("d2", "d2"), c(2.5, 1.8),
+                measure = c("OR", "OR_ratio"), among = c("d3", "d3"))
 }

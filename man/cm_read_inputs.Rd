@@ -4,34 +4,27 @@
 \alias{cm_read_inputs}
 \title{Read model inputs from CSV files or data frames}
 \usage{
-cm_read_inputs(
-  diseases,
-  associations = NULL,
-  impacts,
-  interactions = NULL,
-  three_way = NULL,
-  adjusted_associations = c("error", "use_as_marginal")
-)
+cm_read_inputs(diseases, associations = NULL, impacts, ...)
 }
 \arguments{
-\item{diseases, associations, impacts, interactions, three_way}{Paths to CSV
-files (any names) or data frames. \code{diseases} and \code{impacts} are required;
-\code{associations} can be left out only for the sensitivity tools
-(\code{\link[=deconflate]{deconflate()}} needs at least one association).}
+\item{diseases, associations, impacts}{Paths to CSV files (any names) or
+data frames. \code{diseases} and \code{impacts} are required; \code{associations} can
+be left out only for the sensitivity tools (\code{\link[=deconflate]{deconflate()}} needs at
+least one association).}
 
-\item{adjusted_associations}{Passed to \code{\link[=cm_population]{cm_population()}}.}
+\item{...}{Not used (arguments of earlier versions give a message).}
 }
 \value{
 A \code{\link[=cm_model]{cm_model()}}, with the distributions of uncertain values in
-\verb{$distributions} and any notes from the checks in attribute \code{"problems"}.
+\verb{$distributions} (keyed by table and row, e.g. \code{"associations:3"}) and
+any notes from the checks in attribute \code{"problems"}.
 }
 \description{
-Builds a model (\code{\link[=cm_model]{cm_model()}}) from one table of each kind: the diseases,
-their associations, one impact table and, optionally, interactions and
-three-way terms. Each table can be a path to a CSV file (with any name) or
-a data frame typed in R. Values with a distribution (see Uncertainty) are
-kept in the model, and \code{\link[=deconflate]{deconflate()}} uses them to compute intervals.
-\code{\link[=cm_template]{cm_template()}} writes an example set to start from.
+Builds a model (\code{\link[=cm_model]{cm_model()}}) from three tables: the diseases, their
+associations and one impact table. Each table can be a path to a CSV file
+(with any name) or a data frame typed in R. Values with a distribution
+(see Uncertainty) are kept in the model, and \code{\link[=deconflate]{deconflate()}} uses them to
+compute intervals. \code{\link[=cm_template]{cm_template()}} writes an example set to start from.
 }
 \details{
 All tables are checked before anything is built, and every problem is
@@ -46,52 +39,54 @@ association tables can be shared.
 \section{Columns}{
 
 Column names are not case-sensitive. Optional columns can be left out or
-left empty; unrecognised columns are ignored (with a note). Every table
-can also have a free-text \code{note} column.
+left empty; unrecognised columns are ignored (with a note). In every
+table, \code{disease} (and \code{associated_with}) take a disease id or a
+combination of ids separated by \verb{;} (e.g. \verb{MAS;SCK}), and \code{among} takes a
+subgroup (\code{SCK}, \verb{no SCK}, \verb{SCK;no MET}, or \verb{no others}).
 
-\strong{diseases}: \code{id}, \code{value} (required); \code{type} (\code{prevalence} (default),
+\strong{diseases} (one row per disease; whole-population values only):
+\code{disease}, \code{value} (required); \code{measure} (\code{prevalence} (default),
 \code{probability} or \code{incidence_rate}, converted with \code{1 - exp(-value)}),
-\code{time_horizon}, \code{reference_population}, \code{source}. Ids must not contain
-\code{|}, \verb{;} or \code{:}, and \code{all} is reserved.
+\code{label} (full name), \code{time_horizon}, \code{reference_population}, \code{source},
+\code{note}. Ids must not contain \code{|}, \verb{;} or \code{:} or start with \code{no }; \code{all}
+and \code{others} are reserved.
 
-\strong{associations}: \code{disease1}, \code{disease2}, \code{value} (required); \code{measure}
-(\code{OR} (default), \code{RR}, \code{RD}, \code{cond_prob} (P(disease1 | disease2)) or
-\code{phi}), \code{adjusted} (TRUE/FALSE: covariate-adjusted measures are rejected
-unless \code{adjusted_associations = "use_as_marginal"}), \code{adjusted_for},
-\code{source}. Pairs without a row are unknown: the global model fills in their
-association from the others. An odds ratio of 1 states that two diseases
-are unrelated.
+\strong{associations} (one row per estimate; any row about two or more
+diseases): \code{disease}, \code{value} (required); \code{associated_with}, \code{among},
+\code{adjusted_for}, \code{measure} (\code{OR} (default), \code{RR}, \code{RD}, \code{phi},
+\code{prevalence} or \code{OR_ratio}), \code{study}, \code{source}, \code{note}. See
+\code{\link[=cm_associations]{cm_associations()}} for what each row means. Pairs that no row mentions
+are unknown: the model fills in their association. An odds ratio of 1
+states that two diseases are unrelated. Several rows about the same
+association are pooled.
 
-\strong{impacts}: \code{disease}, \code{value} (required); \code{estimand}, \code{adjusted_for},
-\code{measure}, \code{source}, \code{label}, \code{units} (one label and one unit per table).
-Every disease needs a row. Without a \code{measure} column the impacts are
-additive, in any units (the same for every row; results come back in
-those units): \code{estimand} is \code{crude} (default) or \code{adjusted_linear} (with
-\code{adjusted_for}: ids separated by \verb{;}, or \code{all}), and a disease with no
-impact has the value 0. With a \code{measure} column the impacts are event
-impacts (see \code{\link[=cm_impacts]{cm_impacts()}}): every row needs a measure (\code{HR},
-\code{rate_ratio}, \code{RR}, \code{OR} or \code{RD}) and an estimand (\code{snapshot_crude}, or
-\code{snapshot_stratified} with \code{adjusted_for}), and they are adjusted with
+\strong{impacts} (one row per estimate): \code{disease}, \code{value} (required);
+\code{among}, \code{adjusted_for}, \code{measure}, \code{label}, \code{units} (one label and one
+unit per table), \code{study}, \code{source}, \code{note}. Every disease needs a row of
+its own; a row for a combination (e.g. \verb{SCK;SCM}) adds an interaction to
+the model, and a combination adjusted for \code{all} is the interaction itself.
+See \code{\link[=cm_impacts]{cm_impacts()}}. Without a \code{measure} column the impacts are additive,
+in any units (the same for every row; results come back in those units).
+With a \code{measure} column they are event impacts: every row needs a measure
+(\code{HR}, \code{rate_ratio}, \code{RR}, \code{OR} or \code{RD}), and they are adjusted with
 \code{deconflate(..., event_model = TRUE)}.
 
-\strong{interactions} (additive impacts only): \code{disease1}, \code{disease2}, \code{value}
-(required); \code{source}.
-
-\strong{three_way}: \code{disease1}, \code{disease2}, \code{disease3}, \code{ratio} (required);
-\code{source}. See \code{\link[=cm_three_way]{cm_three_way()}}.
+Files in the layout of earlier versions (columns \code{id} and \code{type},
+\code{disease1} and \code{disease2}, \code{estimand}; three-way and interaction files)
+are reported with what to change.
 }
 
 \section{Uncertainty}{
 
 Every table can have the columns \code{dist} and \code{p1}-\code{p4}. A row with a
 \code{dist} has an uncertain value: \code{\link[=deconflate]{deconflate()}} draws it from its
-distribution (\code{n_draws}), while the point value (\code{value}, or \code{ratio} for
-three-way terms) gives the central estimate. A row with an empty \code{dist} is
-a fixed point value, so point values and uncertain values can be mixed
-freely. Values are drawn on the scale they were entered on (e.g. an
-incidence rate, an odds ratio, a hazard ratio or a percent impact). A
-point value outside the support of its distribution is noted.
-Distributions and their parameters:\tabular{lllll}{
+distribution (\code{n_draws}), while \code{value} gives the central estimate. A row
+with an empty \code{dist} is a fixed point value (and, when a disease or
+association has several rows, an exact one), so point values and
+uncertain values can be mixed freely. Values are drawn on the scale they
+were entered on (e.g. an incidence rate, an odds ratio, a hazard ratio or
+a percent impact). A point value outside the support of its distribution
+is noted. Distributions and their parameters:\tabular{lllll}{
    \code{dist} \tab \code{p1} \tab \code{p2} \tab \code{p3} \tab \code{p4} \cr
    \code{fixed} \tab value \tab  \tab  \tab  \cr
    \code{normal} \tab mean \tab sd \tab lower bound (optional) \tab upper bound (optional) \cr
@@ -117,8 +112,7 @@ deconflate(m, n_draws = 0)
 ex <- system.file("extdata", "five_diseases", package = "deconflate")
 five <- cm_read_inputs(diseases = file.path(ex, "diseases.csv"),
                        associations = file.path(ex, "associations.csv"),
-                       impacts = file.path(ex, "impacts_yield.csv"),
-                       three_way = file.path(ex, "three_way.csv"))
+                       impacts = file.path(ex, "impacts_yield.csv"))
 five
 err <- system.file("extdata", "example_with_errors", package = "deconflate")
 cm_check_inputs(diseases = file.path(err, "diseases.csv"),
@@ -127,8 +121,8 @@ cm_check_inputs(diseases = file.path(err, "diseases.csv"),
 
 # The same kind of tables typed in R
 m2 <- cm_read_inputs(
-  diseases = data.frame(id = c("d1", "d2"), value = c(0.10, 0.15)),
-  associations = data.frame(disease1 = "d1", disease2 = "d2", value = 2),
+  diseases = data.frame(disease = c("d1", "d2"), value = c(0.10, 0.15)),
+  associations = data.frame(disease = "d1", associated_with = "d2", value = 2),
   impacts = data.frame(disease = c("d1", "d2"), value = c(2.5, 5), units = "\% of yield")
 )
 deconflate(m2)

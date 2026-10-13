@@ -63,8 +63,8 @@ reproduce_rasmussen_2022 <- function(yield_sck = 3.05) {
   uk <- uk_dairy_2022_analyses(yield_sck, culling = TRUE)
   eco <- uk_dairy_2022_economics()
   eco$valuation$culling <- uk_dairy_2022_culling_valuation()
-  res <- lapply(uk, adjust_impacts, method = "published", warn = FALSE)
-  ids <- uk[[1]]$diseases$id
+  res <- lapply(uk, adjust_published)
+  ids <- uk[[1]]$diseases$disease
   nms <- names(uk)
 
   adjusted <- data.frame(disease = ids, stringsAsFactors = FALSE)
@@ -138,8 +138,7 @@ reproduce_rasmussen_2024 <- function(n_draws = 5000, seed = 2024,
   }))
   comparison$analysis[comparison$analysis == "culling_hr_minus_1"] <- "culling_hr"
   rownames(comparison) <- NULL
-  adjusted <- lapply(global_dairy_analyses(inputs, culling = TRUE), adjust_impacts,
-                     method = "published", warn = FALSE)
+  adjusted <- lapply(global_dairy_analyses(inputs, culling = TRUE), adjust_published)
   structure(list(study = "Rasmussen et al. (2024)", comparison = comparison,
                  central = adjusted, summary = s, n_rejected = vapply(mc$analyses, `[[`, numeric(1), "n_rejected"),
                  n_draws = n_draws, inputs = inputs),

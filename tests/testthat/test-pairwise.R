@@ -42,16 +42,17 @@ test_that("all association measures map to the same 2x2 table", {
   expect_equal(association_to_joint("OR", 2.5, p1, p2), p11, tolerance = 1e-12)
   expect_equal(association_to_joint("RR", pd1_d2 / pd1_nd2, p1, p2), p11, tolerance = 1e-12)
   expect_equal(association_to_joint("RD", pd1_d2 - pd1_nd2, p1, p2), p11, tolerance = 1e-12)
-  expect_equal(association_to_joint("cond_prob", pd1_d2, p1, p2), p11, tolerance = 1e-12)
+  expect_equal(association_to_joint("prevalence", pd1_d2, p1, p2), p11, tolerance = 1e-12)
   expect_equal(association_to_joint("phi", phi, p1, p2), p11, tolerance = 1e-12)
   # Independence is an odds ratio of 1; the retired measures are not converted.
   expect_equal(association_to_joint("OR", 1, p1, p2), p1 * p2)
   expect_error(association_to_joint("independent", NA, p1, p2), "Cannot convert")
   expect_error(association_to_joint("table", 2, p1, p2), "Cannot convert")
+  expect_error(association_to_joint("cond_prob", pd1_d2, p1, p2), "Cannot convert")
 })
 
 test_that("incompatible measures are flagged as infeasible", {
-  expect_error(association_to_joint("cond_prob", 0.9, 0.1, 0.5),
+  expect_error(association_to_joint("prevalence", 0.9, 0.1, 0.5),
                class = "deconflate_infeasible")
   expect_error(association_to_joint("RD", 0.9, 0.1, 0.5),
                class = "deconflate_infeasible")
@@ -71,7 +72,12 @@ test_that("retired measures and count columns are rejected with what to do inste
                class = "deconflate_unsupported")
   # Counts are entered as their odds ratio; there are no count arguments.
   expect_error(cm_associations("a", "b", measure = "OR", n11 = 20, n10 = 30, n01 = 40, n00 = 110),
-               "unused argument")
+               "Unknown arguments: n11")
+  expect_error(cm_associations("a", "b", 0.3, measure = "cond_prob"), "now 'prevalence'",
+               class = "deconflate_unsupported")
+  expect_error(cm_associations("a", "b", 2, adjusted = TRUE), "adjusted_for", class = "deconflate_unsupported")
+  expect_error(cm_associations(disease1 = "a", disease2 = "b", value = 2), "associated_with",
+               class = "deconflate_unsupported")
   a <- cm_associations("a", "b", (20 * 110) / (30 * 40))
   expect_equal(a$measure, "OR")
   expect_equal(a$value, 20 * 110 / (30 * 40))
@@ -80,8 +86,12 @@ test_that("retired measures and count columns are rejected with what to do inste
   expect_error(cm_associations("a", "b"), "value")
   expect_error(cm_associations(c("a", "a"), c("b", "c"), c(2, NA)), "missing")
   expect_error(cm_associations("a", "b", Inf), "finite")
-  expect_error(cm_associations(c("a", "b"), c("b", "a"), c(2, 3)), "Duplicate")
-  expect_error(cm_associations("a", "a", 2), "two different diseases")
+  # Several rows about one pair are allowed (they are pooled); a row about
+  # one disease on both sides is not.
+  expect_s3_class(cm_associations(c("a", "b"), c("b", "a"), c(2, 3)), "cm_associations")
+  expect_error(cm_population(cm_diseases("a", 0.2), cm_associations("a", "a", 2)), "share a")
+  expect_error(cm_associations("a", "b", 1.2, measure = "prevalence"), "between 0 and 1")
+  expect_error(cm_associations("a", "b", 0, measure = "OR_ratio"), "positive")
 })
 
 test_that("excess matrix matches the Supplementary File", {
@@ -96,8 +106,9 @@ test_that("excess matrix matches the Supplementary File", {
 
 test_that("pair tables report specified and unknown pairs", {
   pt <- pair_tables(t2_supp())
-  expect_equal(names(pt), c("disease1", "disease2", "measure", "status", "p11", "or",
+  expect_equal(names(pt), c("disease1", "disease2", "measure", "status", "rows", "p11", "or",
                             "ep_2_given_1", "ep_1_given_2"))
+  expect_equal(pt$rows, c("1", "2", "3"))
   expect_equal(pt$status, rep("specified", 3))
   expect_equal(pt$measure, rep("OR", 3))
   expect_equal(pt$or, c(2, 1, 3), tolerance = 1e-10)
@@ -118,29 +129,26 @@ test_that("pair tables report specified and unknown pairs", {
   expect_true(all(is.na(p0$measure)))
   # Directional measures keep their orientation.
   pr <- pair_tables(cm_population(cm_diseases(c("a", "b"), c(0.2, 0.3)),
-                                  cm_associations("b", "a", 0.5, measure = "cond_prob")))
+                                  cm_associations("b", "a", 0.5, measure = "prevalence")))
   expect_equal(pr$p11, 0.5 * 0.2)
   expect_equal(nrow(pair_tables(cm_population(cm_diseases("a", 0.2)))), 0)
+  # A pair that only other kinds of rows mention.
+  po <- pair_tables(cm_population(cm_diseases(c("a", "b", "c"), c(0.2, 0.3, 0.25)),
+                                  cm_associations("a", "b", 2, among = "c")))
+  expect_equal(po$status, c("other rows", "unknown", "unknown"))
+  expect_true(is.na(po$p11[1]))
 })
 
-test_that("unknown pairs are rejected by pairwise methods and filled in by the global method", {
+test_that("unknown pairs are rejected by pairwise calculations and filled in by the model", {
   m <- t2_unknown_model()
-  expect_equal(global_reasons(m), "1 pair without an association (unknown)")
-  expect_error(adjust_impacts(m, method = "simultaneous"), class = "deconflate_unknown_pairs")
-  expect_error(adjust_impacts(m, method = "simultaneous"), "odds ratio of 1")
-  expect_error(adjust_impacts(m, method = "published"), class = "deconflate_unknown_pairs")
+  expect_false(shortcut_ok(m))
+  expect_error(adjust_published(m), class = "deconflate_unknown_pairs")
   expect_error(excess_matrix(m), class = "deconflate_unknown_pairs")
-  # deconflate() uses the global method, with a note giving the reason.
+  # deconflate() fits the full model, which fills the pair in.
   res <- deconflate(m, n_draws = 0)
   expect_s3_class(res, "cm_result")
-  expect_equal(res$method, "global")
-  expect_equal(res$notes, "The global method was used because of 1 pair without an association (unknown).")
-  # method = "simultaneous" behaves the same, and says so.
-  rs <- deconflate(m, method = "simultaneous", n_draws = 0)
-  expect_equal(rs$method, "global")
-  expect_match(rs$notes, "instead of the simultaneous method")
-  expect_equal(rs$adjusted$adjusted, res$adjusted$adjusted)
-  expect_length(deconflate(m, method = "global", n_draws = 0)$notes, 0)
+  expect_equal(res$method, "full model")
+  expect_length(res$notes, 0)
   # Python reference (reference_v040.py, section 6).
   expect_equal(res$adjusted$adjusted, c(2.1, 2.9872624936, 4.4812715344), tolerance = 1e-8)
   expect_equal(res$totals$adjusted_total, 2.4364966316833225, tolerance = 1e-9)
@@ -151,15 +159,15 @@ test_that("unknown pairs are rejected by pairwise methods and filled in by the g
   # Unconstrained a:c is implied by the maximum-entropy fit, so it differs
   # from stating independence (an odds ratio of 1).
   ind <- deconflate(set_association(m, "a", "c", 1), n_draws = 0)
-  expect_equal(ind$method, "simultaneous")
+  expect_equal(ind$method, "pairwise shortcut")
   expect_equal(nrow(ind$unknown_pairs), 0)
   expect_equal(ind$adjusted$adjusted, c(2.2632638445, 2.9469446222, 4.5487022146), tolerance = 1e-8)
   expect_false(isTRUE(all.equal(res$adjusted$adjusted, ind$adjusted$adjusted)))
-  # compare_methods() runs the methods as asked: the pairwise ones fail.
+  # compare_methods(): the published approximation needs every pair.
   cmp <- compare_methods(m)
-  expect_equal(cmp$methods, "global")
-  expect_setequal(names(cmp$failed), c("published", "simultaneous"))
-  expect_match(cmp$failed[["simultaneous"]], "No association for a-c")
+  expect_equal(cmp$methods, "deconflate")
+  expect_equal(names(cmp$failed), "published")
+  expect_match(cmp$failed[["published"]], "missing: a-c")
 })
 
 test_that("deconflate() needs at least one association", {
