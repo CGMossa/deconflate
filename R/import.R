@@ -82,7 +82,9 @@
 #' @param ... Not used (arguments of earlier versions give a message).
 #' @return A [cm_model()], with the distributions of uncertain values in
 #'   `$distributions` (keyed by table and row, e.g. `"associations:3"`) and
-#'   any notes from the checks in attribute `"problems"`.
+#'   any notes from the checks in attribute `"problems"`. The notes are also
+#'   shown as a message of class `deconflate_input_notes`, which holds them
+#'   in `$problems`; `suppressMessages()` hides it.
 #' @export
 #' @examples
 #' dir <- file.path(tempdir(), "deconflate-inputs")
@@ -122,7 +124,7 @@ cm_read_inputs <- function(diseases, associations = NULL, impacts, ...) {
     cm_abort(format_problems(pr[pr$severity == "error", , drop = FALSE]),
              class = "deconflate_input_problems")
   }
-  if (nrow(pr)) message(format_problems(pr))
+  if (nrow(pr)) cm_inform(format_problems(pr), class = "deconflate_input_notes", problems = pr)
   m <- chk$model
   attr(m, "problems") <- pr
   m
@@ -263,7 +265,7 @@ cm_template <- function(dir, overwrite = FALSE) {
                      paste(basename(paths[exists]), collapse = ", ")))
   }
   for (k in seq_along(tabs)) utils::write.csv(tabs[[k]], paths[k], row.names = FALSE, na = "")
-  message(sprintf("Wrote %d files to %s", length(paths), dir))
+  cm_inform(sprintf("Wrote %d files to %s", length(paths), dir))
   invisible(paths)
 }
 

@@ -189,3 +189,11 @@ check_overall_risk <- function(overall_risk, event_model) {
   }
   list(value = overall_risk, dist = NULL)
 }
+
+# Show a message of class "deconflate_message" (and `class`), so that callers
+# can muffle it by class; `...`: named fields of the condition. Built by hand,
+# as messageCondition() needs R 4.6; message() adds no newline to a condition.
+cm_inform <- function(msg, class = NULL, ...) {
+  message(structure(class = c(class, "deconflate_message", "message", "condition"),
+                    list(message = paste0(msg, "\n"), call = NULL, ...)))
+}

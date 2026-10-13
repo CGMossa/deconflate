@@ -69,6 +69,8 @@ ratios, and risks are proportions of animals over the period.
 by \code{\link[=cm_read_inputs]{cm_read_inputs()}} have class \code{deconflate_input_problems}. Warning classes
 include \code{deconflate_sign_change}, \code{deconflate_nonconvergence} and
 \code{deconflate_nonfinite_warning} (all also \code{deconflate_warning}).
+Messages are of class \code{deconflate_message}; the notes of
+\code{\link[=cm_read_inputs]{cm_read_inputs()}} are also \code{deconflate_input_notes}.
 }
 }
 

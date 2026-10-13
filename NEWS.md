@@ -7,6 +7,13 @@ model and one input layout, in which a row can be about a combination of
 diseases or a subgroup, crude or adjusted, and several rows can describe
 the same thing.
 
+## Errors and warnings
+
+* Messages are classed conditions (`deconflate_message`), so that code can
+  hide them by class. The notes of `cm_read_inputs()` are also
+  `deconflate_input_notes` and hold the notes table in `$problems`. The
+  printed text is unchanged.
+
 ## Breaking changes: one model, one input layout
 
 * **One model.** The `method` argument is removed from `deconflate()`,

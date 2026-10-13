@@ -58,6 +58,8 @@
 #'   by [cm_read_inputs()] have class `deconflate_input_problems`. Warning classes
 #'   include `deconflate_sign_change`, `deconflate_nonconvergence` and
 #'   `deconflate_nonfinite_warning` (all also `deconflate_warning`).
+#'   Messages are of class `deconflate_message`; the notes of
+#'   [cm_read_inputs()] are also `deconflate_input_notes`.
 #'
 #' @references
 #' Rasmussen P, Shaw APM, Munoz V, Bruce M, Torgerson PR (2022). Estimating the
