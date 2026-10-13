@@ -3,13 +3,21 @@
 `%||%` <- function(x, y) if (is.null(x)) y else x
 
 # Raise a classed error. All package errors inherit from "deconflate_error".
-# Classes used for failures that callers (Monte Carlo, comparisons, screens)
+# Classes used for failures that callers (draws, comparisons, screens)
 # handle separately:
 #   deconflate_infeasible      inputs that admit no valid probabilities
 #   deconflate_singular        a singular or non-identifiable system
 #   deconflate_nonconvergence  a numerical procedure did not converge
 #   deconflate_unsupported     an estimand/method combination that is not supported
 #   deconflate_nonfinite       non-finite results
+# Two more mark particular errors:
+#   deconflate_unknown_pairs   (with deconflate_unsupported) a calculation needs
+#                              a crude pair row for every pair
+#   deconflate_input_problems  cm_read_inputs() found errors in the tables
+# Warnings inherit from "deconflate_warning"; their classes are
+# deconflate_sign_change, deconflate_nonfinite_warning,
+# deconflate_nonconvergence and deconflate_incomplete_allocation. Users find
+# the classes in ?deconflate-package (Conventions); keep both lists in step.
 cm_abort <- function(msg, class = NULL) {
   stop(errorCondition(msg, class = c(class, "deconflate_error"), call = NULL))
 }
