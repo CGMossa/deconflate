@@ -30,7 +30,6 @@ cm_threshold(
   target = NULL,
   diseases = NULL,
   by = c("contribution", "adjusted"),
-  method = "auto",
   event_model = FALSE,
   overall_risk = NULL,
   n_grid = 101L,
@@ -49,15 +48,16 @@ cm_threshold(
 
 - input:
 
-  The input to vary, keyed as in
-  [`cm_model()`](https://rasmussenphilip.github.io/deconflate/reference/cm_model.md)
-  (`distributions`): `"assoc:<d1>:<d2>"` (the pair's association, on its
-  measure; a pair without an association is varied as an odds ratio, so
-  unknown pairs can be explored), `"inter:<d1>:<d2>"` (an interaction),
+  The input to vary: `"assoc:<d1>:<d2>"` (the pair's crude pair row, on
+  its measure; a pair without one is varied as an odds ratio, so unknown
+  pairs can be explored), `"inter:<d1>:<d2>"` (an interaction, see
+  [`set_interaction()`](https://rasmussenphilip.github.io/deconflate/reference/set_interaction.md)),
   `"prob:<disease>"` (the disease's `value`, on the scale it was
-  entered), `"impact:<disease>"` (a raw impact),
-  `"three:<d1>:<d2>:<d3>"` (a three-way ratio), or, for event impacts,
-  `"risk"` (the overall risk).
+  entered), `"impact:<disease>"` (the impact row of a disease, when it
+  has one), `"three:<d1>:<d2>:<d3>"` (an OR_ratio, see
+  [`set_three_way()`](https://rasmussenphilip.github.io/deconflate/reference/set_three_way.md)),
+  `"associations:<row>"` or `"impacts:<row>"` (any row, by its number),
+  or, for event impacts, `"risk"` (the overall risk).
 
 - range:
 
@@ -82,7 +82,7 @@ cm_threshold(
 
   For `"rank"`: `"contribution"` (default) or `"adjusted"`.
 
-- method, event_model, overall_risk:
+- event_model, overall_risk:
 
   As in
   [`deconflate()`](https://rasmussenphilip.github.io/deconflate/reference/deconflate.md)
@@ -121,7 +121,8 @@ point with its status, the aggregate and the condition number),
 `regions` (stretches of unusable grid points), `summary` (per item:
 number of thresholds, and whether part of the range could not be
 evaluated), and the settings (`input`, `range`, `baseline` value of the
-input, `method`, `conclusion`, `target`, `fixed`).
+input, `method` (the computations used), `conclusion`, `target`,
+`fixed`).
 
 ## Details
 
@@ -156,11 +157,10 @@ ones is not reported as a crossing; such stretches appear in `regions`.
 
 Each point is adjusted as
 [`deconflate()`](https://rasmussenphilip.github.io/deconflate/reference/deconflate.md)
-would (point estimates; the method is chosen for the point's own
-inputs). When the input is an impact, an interaction or the overall risk
-(which do not change the joint distribution) and the adjustment uses the
-joint distribution, it is fitted once and reused (or the `joint` passed
-through `...` is used).
+would (point estimates). When the input is an impact row, an interaction
+or the overall risk (which do not change the joint distribution) and the
+adjustment uses the joint distribution, it is fitted once and reused (or
+the `joint` passed through `...` is used).
 
 Thresholds are deterministic: they are for the model's input values.
 
@@ -171,7 +171,7 @@ m <- example_supplement()
 # At what odds ratio between d1 and d2 does the ranking change?
 th <- cm_threshold(m, "assoc:d1:d2", c(0.2, 20), conclusion = "rank")
 th
-#> <cm_threshold> rank over assoc:d1:d2 in [0.2, 20] (baseline 2; method simultaneous)
+#> <cm_threshold> rank over assoc:d1:d2 in [0.2, 20] (baseline 2; method pairwise shortcut)
 #> Fixed: all inputs other than assoc:d1:d2 at the model's values.
 #> 
 #> No crossing found in the range.
@@ -180,6 +180,6 @@ th
 cm_threshold(m, "assoc:d1:d3", c(1, 50), conclusion = "change", target = -0.1)$thresholds
 #>   conclusion  item    status threshold    lower    upper        below
 #> 1     change total threshold  5.263907 5.263907 5.263907 4.931178e-10
-#>           above                                  description
-#> 1 -3.748852e-10 the aggregate falls below the baseline - 10%
+#>          above                                  description
+#> 1 -3.74885e-10 the aggregate falls below the baseline - 10%
 ```

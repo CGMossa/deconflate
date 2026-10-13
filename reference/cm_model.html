@@ -23,7 +23,7 @@
     <li><a class="dropdown-item" href="../articles/thresholds-and-scaling.html">Threshold searches and many diseases</a></li>
     <li><a class="dropdown-item" href="../articles/event-impacts.html">Event impacts (culling and mortality)</a></li>
     <li><a class="dropdown-item" href="../articles/reproducing-published.html">Reproducing the published analyses</a></li>
-    <li><a class="dropdown-item" href="../articles/interactions.html">Disease combinations, interactions and attribution</a></li>
+    <li><a class="dropdown-item" href="../articles/interactions.html">Disease combinations, subgroups and interactions</a></li>
     <li><a class="dropdown-item" href="../articles/uncertainty.html">Uncertainty and sensitivity</a></li>
   </ul></li>
 <li class="nav-item"><a class="nav-link" href="../news/index.html">Changelog</a></li>
@@ -52,11 +52,9 @@
     <div class="sourceCode"><pre class="sourceCode r"><code><span><span class="fu">cm_model</span><span class="op">(</span></span>
 <span>  <span class="va">population</span>,</span>
 <span>  impacts <span class="op">=</span> <span class="cn">NULL</span>,</span>
-<span>  interactions <span class="op">=</span> <span class="cn">NULL</span>,</span>
 <span>  associations <span class="op">=</span> <span class="cn">NULL</span>,</span>
-<span>  three_way <span class="op">=</span> <span class="cn">NULL</span>,</span>
-<span>  adjusted_associations <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"error"</span>, <span class="st">"use_as_marginal"</span><span class="op">)</span>,</span>
-<span>  distributions <span class="op">=</span> <span class="cn">NULL</span></span>
+<span>  distributions <span class="op">=</span> <span class="cn">NULL</span>,</span>
+<span>  <span class="va">...</span></span>
 <span><span class="op">)</span></span></code></pre></div>
     </div>
 
@@ -66,34 +64,33 @@
 
 <dl><dt id="arg-population">population<a class="anchor" aria-label="anchor" href="#arg-population"></a></dt>
 <dd><p>A <code><a href="cm_population.html">cm_population()</a></code>. For convenience, a <code><a href="cm_diseases.html">cm_diseases()</a></code>
-object can be given instead, together with <code>associations</code> and
-<code>three_way</code>.</p></dd>
+object can be given instead, together with <code>associations</code>.</p></dd>
 
 
 <dt id="arg-impacts">impacts<a class="anchor" aria-label="anchor" href="#arg-impacts"></a></dt>
-<dd><p>A <code><a href="cm_impacts.html">cm_impacts()</a></code> object with one value per disease.</p></dd>
+<dd><p>A <code><a href="cm_impacts.html">cm_impacts()</a></code> object.</p></dd>
 
 
-<dt id="arg-interactions">interactions<a class="anchor" aria-label="anchor" href="#arg-interactions"></a></dt>
-<dd><p>Optional <code><a href="cm_interactions.html">cm_interactions()</a></code> object (additive impacts
-only).</p></dd>
-
-
-<dt id="arg-associations-three-way-adjusted-associations">associations, three_way, adjusted_associations<a class="anchor" aria-label="anchor" href="#arg-associations-three-way-adjusted-associations"></a></dt>
-<dd><p>Used only when
-<code>population</code> is a <code><a href="cm_diseases.html">cm_diseases()</a></code> object; see <code><a href="cm_population.html">cm_population()</a></code>.</p></dd>
+<dt id="arg-associations">associations<a class="anchor" aria-label="anchor" href="#arg-associations"></a></dt>
+<dd><p>Used only when <code>population</code> is a <code><a href="cm_diseases.html">cm_diseases()</a></code>
+object; see <code><a href="cm_population.html">cm_population()</a></code>.</p></dd>
 
 
 <dt id="arg-distributions">distributions<a class="anchor" aria-label="anchor" href="#arg-distributions"></a></dt>
 <dd><p>Optional named list of distributions (<a href="distributions.html">distributions</a>)
 for uncertain inputs, used when <code><a href="deconflate.html">deconflate()</a></code> runs draws. Names are
 keys: <code>"prob:&lt;disease&gt;"</code> (the disease's <code>value</code>, on the scale it was
-entered), <code>"assoc:&lt;d1&gt;:&lt;d2&gt;"</code> (the association, on its own measure),
-<code>"three:&lt;d1&gt;:&lt;d2&gt;:&lt;d3&gt;"</code>, <code>"impact:&lt;disease&gt;"</code> and <code>"inter:&lt;d1&gt;:&lt;d2&gt;"</code>.
-<code><a href="cm_read_inputs.html">cm_read_inputs()</a></code> fills this in from the <code>dist</code> columns of the tables;
-<code><a href="cm_dist_table.html">cm_dist_table()</a></code> builds it from a table of keys. When <code>population</code> is a
+entered), <code>"associations:&lt;row&gt;"</code> and <code>"impacts:&lt;row&gt;"</code> (a row of those
+tables, by its number in <code>row</code>). For convenience, <code>"assoc:&lt;d1&gt;:&lt;d2&gt;"</code>
+names the crude row of a pair and <code>"impact:&lt;id&gt;"</code> the row of a disease
+or combination, when there is exactly one. <code><a href="cm_read_inputs.html">cm_read_inputs()</a></code> fills
+this in from the <code>dist</code> columns of the tables. When <code>population</code> is a
 model and <code>distributions</code> is not given, its distributions are kept,
-except those of impacts or interactions that are replaced.</p></dd>
+except those of impacts that are replaced.</p></dd>
+
+
+<dt id="arg--">...<a class="anchor" aria-label="anchor" href="#arg--"></a></dt>
+<dd><p>Not used (arguments of earlier versions give a message).</p></dd>
 
 </dl></div>
     <div class="section level2">
@@ -112,9 +109,10 @@ except those of impacts or interactions that are replaced.</p></dd>
 <span class="r-in"><span><span class="va">m</span></span></span>
 <span class="r-out co"><span class="r-pr">#&gt;</span> &lt;cm_model&gt;</span>
 <span class="r-out co"><span class="r-pr">#&gt;</span>   Diseases: 3 (d1, d2, d3)</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span>   Disease pairs: 3 (2 with an association, 1 unknown)</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span>   Association rows: 2 (OR: 2)</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span>   Disease pairs: 3 (2 with a crude pair row, 1 unknown)</span>
 <span class="r-out co"><span class="r-pr">#&gt;</span>   Impacts: (unlabelled) [%] (additive)</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span>   Estimands: crude: 3</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span>   Impact rows: 3 (0 adjusted, 0 within subgroups)</span>
 <span class="r-out co"><span class="r-pr">#&gt;</span>   Uncertain inputs (with a distribution): 1</span>
 </code></pre></div>
     </div>

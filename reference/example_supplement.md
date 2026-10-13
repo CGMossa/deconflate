@@ -28,7 +28,7 @@ Without rounding, the published method gives 10,215.7 and 21.1, 56.7 and
 
 ``` r
 deconflate(example_supplement())
-#> <cm_result> method: simultaneous; yield [%]
+#> <cm_result> pairwise shortcut; yield [%]
 #> 
 #>  disease raw adjusted   change
 #>       d1 2.5    2.143 -0.14270
@@ -42,19 +42,18 @@ deconflate(example_supplement())
 #> * No input has a distribution, so no draws were run: the results are point
 #>   estimates.
 compare_methods(example_supplement())
-#> <cm_comparison> methods: published, simultaneous, global
+#> <cm_comparison> methods: published, deconflate
 #> Impacts: yield
 #> Units: %
 #> 
 #> Adjusted values:
-#>  disease raw published simultaneous global
-#>       d1 2.5      2.07         2.14   2.14
-#>       d2 5.0      3.70         3.39   3.39
-#>       d3 7.5      6.75         6.93   6.93
+#>  disease raw published deconflate
+#>       d1 2.5      2.07       2.14
+#>       d2 5.0      3.70       3.39
+#>       d3 7.5      6.75       6.93
 #> 
 #> Totals:
-#>        method raw_sum adjusted_total
-#>     published     2.5          2.111
-#>  simultaneous     2.5          2.109
-#>        global     2.5          2.109
+#>      method raw_sum adjusted_total
+#>   published     2.5          2.111
+#>  deconflate     2.5          2.109
 ```

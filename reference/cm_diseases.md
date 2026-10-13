@@ -1,33 +1,39 @@
 # Describe the diseases in a system
 
-Describe the diseases in a system
+One row per disease: how common it is in the whole population. Rows
+about two or more diseases (associations, combinations, prevalences
+within subgroups) belong in
+[`cm_associations()`](https://rasmussenphilip.github.io/deconflate/reference/cm_associations.md).
 
 ## Usage
 
 ``` r
 cm_diseases(
-  id,
+  disease,
   value,
-  type = "prevalence",
+  measure = "prevalence",
+  label = NA_character_,
   time_horizon = NA_character_,
   reference_population = NA_character_,
-  source = NA_character_
+  source = NA_character_,
+  note = NA_character_,
+  ...
 )
 ```
 
 ## Arguments
 
-- id:
+- disease:
 
-  Character vector of unique disease identifiers (no `|`, `;` or `:`;
-  `"all"` is reserved).
+  Character vector of unique disease ids (no `|`, `;` or `:`; `"all"`
+  and `"others"` are reserved).
 
 - value:
 
-  Numeric vector of disease occurrence values. Interpreted according to
-  `type`.
+  Numeric vector of disease occurrence values, interpreted according to
+  `measure`.
 
-- type:
+- measure:
 
   Character, one per disease (or recycled):
 
@@ -42,6 +48,10 @@ cm_diseases(
     Converted to a probability assuming Poisson-distributed events,
     `1 - exp(-value)`, as in Rasmussen et al. (2024), eq. 1.
 
+- label:
+
+  Optional full names of the diseases (e.g. `"lameness"`).
+
 - time_horizon:
 
   Character label of the period the probabilities refer to (e.g.
@@ -52,22 +62,30 @@ cm_diseases(
 
   Optional description of the population the values come from.
 
-- source:
+- source, note:
 
-  Optional citation.
+  Optional citation and free-text note.
+
+- ...:
+
+  Not used (arguments of earlier versions give a message).
 
 ## Value
 
 A `cm_diseases` data frame with the converted probability in column
-`prob` and the inputs retained as metadata.
+`prob` and the inputs retained.
 
 ## Examples
 
 ``` r
 cm_diseases(c("SCK", "PTB"), c(0.4789, 0.1001),
-            type = c("incidence_rate", "prevalence"),
+            measure = c("incidence_rate", "prevalence"),
+            label = c("subclinical ketosis", "paratuberculosis"),
             time_horizon = "lactation")
-#>    id      prob  value           type time_horizon reference_population source
-#> 1 SCK 0.3805356 0.4789 incidence_rate    lactation                 <NA>   <NA>
-#> 2 PTB 0.1001000 0.1001     prevalence    lactation                 <NA>   <NA>
+#>   disease      prob  value        measure               label time_horizon
+#> 1     SCK 0.3805356 0.4789 incidence_rate subclinical ketosis    lactation
+#> 2     PTB 0.1001000 0.1001     prevalence    paratuberculosis    lactation
+#>   reference_population source note
+#> 1                 <NA>   <NA> <NA>
+#> 2                 <NA>   <NA> <NA>
 ```

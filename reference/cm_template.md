@@ -36,29 +36,25 @@ The file paths, invisibly.
 - `yield.csv`: additive impacts on milk yield, in percent of yield (any
   units can be used);
 
-- `yield_interactions.csv`: an empty interactions table for the yield
-  impacts (pairwise interactions in the same units);
-
 - `culling.csv`: event impacts on culling (hazard ratios and a risk
-  ratio), for `deconflate(..., event_model = TRUE, overall_risk = ...)`;
-
-- `three_way.csv`: an empty three-way table.
+  ratio), for `deconflate(..., event_model = TRUE, overall_risk = ...)`.
 
 The folder
 `system.file("extdata", "five_diseases", package = "deconflate")` has a
-fuller example that uses every feature.
+fuller example that uses every feature (several rows per item,
+subgroups, adjusted rows, combinations).
 
 ## Examples
 
 ``` r
 dir <- file.path(tempdir(), "my-inputs")
 cm_template(dir, overwrite = TRUE)
-#> Wrote 6 files to /tmp/RtmpNxOcWp/my-inputs
+#> Wrote 4 files to /tmp/RtmpEx0sgC/my-inputs
 yield <- cm_read_inputs(diseases = file.path(dir, "diseases.csv"),
                         associations = file.path(dir, "associations.csv"),
                         impacts = file.path(dir, "yield.csv"))
 deconflate(yield, n_draws = 200, seed = 1)
-#> <cm_result> method: simultaneous; milk yield loss [% of yield]
+#> <cm_result> pairwise shortcut; milk yield loss [% of yield]
 #> 
 #>  disease  raw adjusted lower  upper   change
 #>      LAM 4.81    2.871 0.600  4.697 -0.40320
@@ -66,13 +62,13 @@ deconflate(yield, n_draws = 200, seed = 1)
 #>      MET 5.61    3.170 2.302  4.010 -0.43496
 #> 
 #> Raw sum: 4.966; adjusted total: 4.015 (95% interval 3.111 to 4.932)
-#> Diagnostics: residual 1.78e-15, condition number 2, sign changes 0
+#> Diagnostics: residual 0.00e+00, condition number 2, sign changes 0
 #> Uncertainty: 95% intervals from 200 draws (0 rejected; random sampling; seed 1).
 culling <- cm_read_inputs(diseases = file.path(dir, "diseases.csv"),
                           associations = file.path(dir, "associations.csv"),
                           impacts = file.path(dir, "culling.csv"))
 deconflate(culling, event_model = TRUE, overall_risk = 0.25, n_draws = 0)
-#> <cm_event_result> culling; method: snapshot
+#> <cm_event_result> culling; snapshot
 #> 
 #>  disease measure  raw adjusted_hr
 #>      LAM      HR 1.74       1.514
@@ -87,5 +83,5 @@ deconflate(culling, event_model = TRUE, overall_risk = 0.25, n_draws = 0)
 #>      SCK     0.047051 0.64205
 #>      MET     0.003936 0.05371
 #> 
-#> Diagnostics: residual 2.22e-16, condition number 2.2, sign changes 0
+#> Diagnostics: residual 3.89e-16, condition number 2.2, sign changes 0
 ```

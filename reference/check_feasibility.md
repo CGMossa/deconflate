@@ -2,8 +2,12 @@
 
 Each pairwise 2x2 table can be valid on its own while no distribution of
 disease combinations satisfies all of them together. This function
-checks joint feasibility before fitting the global model, and points to
-the pairs that conflict.
+checks the pairwise tables (from the crude pair rows, pooled where a
+pair has several) and points to the pairs that conflict. Rows about
+combinations or subgroups are checked by fitting the joint distribution,
+which
+[`deconflate()`](https://rasmussenphilip.github.io/deconflate/reference/deconflate.md)
+does for the central estimate (up to 20 diseases).
 
 ## Usage
 

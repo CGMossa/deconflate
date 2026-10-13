@@ -3,12 +3,111 @@
 ## deconflate (development version)
 
 Version 0.4 is being built in steps (see `ROADMAP.md`). So far: the
-interface is slimmed to de-conflation itself, and everything runs
-through one function,
+interface is slimmed to de-conflation itself; everything runs through
+one function,
 [`deconflate()`](https://rasmussenphilip.github.io/deconflate/reference/deconflate.md),
-with one impact table per call.
+with one impact table per call; and there is one model and one input
+layout, in which a row can be about a combination of diseases or a
+subgroup, crude or adjusted, and several rows can describe the same
+thing.
 
-### Breaking changes
+### Breaking changes: one model, one input layout
+
+- **One model.** The `method` argument is removed from
+  [`deconflate()`](https://rasmussenphilip.github.io/deconflate/reference/deconflate.md),
+  [`cm_threshold()`](https://rasmussenphilip.github.io/deconflate/reference/cm_threshold.md)
+  and the screens (an error says so).
+  [`deconflate()`](https://rasmussenphilip.github.io/deconflate/reference/deconflate.md)
+  always gives the answer of the maximum-entropy model that matches
+  every association row and reproduces every impact row. When the
+  pairwise 2x2 tables give the same answer (every association row a
+  crude pair row, every pair covered, one-disease impact rows, additive
+  impacts), they are used directly; up to 20 diseases the joint
+  distribution is still fitted once, to check that the rows can hold
+  together. `$diagnostics$method` says `"pairwise shortcut"` or
+  `"full model"`. The `feasibility` argument is removed (use
+  [`check_feasibility()`](https://rasmussenphilip.github.io/deconflate/reference/check_feasibility.md)
+  for the separate checks).
+  [`compare_methods()`](https://rasmussenphilip.github.io/deconflate/reference/compare_methods.md)
+  sets the model (`"deconflate"`) beside the published approximation
+  (`"published"`, and for event impacts `"first_order"`).
+- **One input layout.** Three tables, with the same core columns:
+  - `diseases`: `disease`, `measure` (`prevalence`, `probability`,
+    `incidence_rate`), `value`, and `label`, `time_horizon`,
+    `reference_population`;
+  - `associations`: `disease`, `associated_with`, `among`,
+    `adjusted_for`, `measure`, `value`, `study`;
+  - impacts: `disease`, `among`, `adjusted_for`, `measure` (event
+    impacts only), `value`, `label`, `units`, `study`; plus `dist`,
+    `p1`-`p4`, `source` and `note` everywhere. `disease` and
+    `associated_with` take a disease or a combination (`"MAS;SCK"`);
+    `among` takes a subgroup (`"SCK"`, `"no SCK"`, `"no others"`).
+    [`cm_diseases()`](https://rasmussenphilip.github.io/deconflate/reference/cm_diseases.md),
+    [`cm_associations()`](https://rasmussenphilip.github.io/deconflate/reference/cm_associations.md)
+    and
+    [`cm_impacts()`](https://rasmussenphilip.github.io/deconflate/reference/cm_impacts.md)
+    take the same arguments. Old columns and arguments (`id`, `type`,
+    `disease1`, `disease2`, `estimand`, `adjusted`,
+    `adjusted_associations`) give a message saying what to write
+    instead.
+- **Association measures:** `OR`, `RR`, `RD`, `phi`, `prevalence`
+  (replaces `cond_prob`) and `OR_ratio` (the odds ratio among a subgroup
+  divided by that among its complement; replaces three-way terms). A row
+  about a combination compares animals with all of its diseases against
+  animals with none of them. The three-way and interactions tables,
+  `cm_three_way()` and `cm_interactions()` are removed
+  ([`set_three_way()`](https://rasmussenphilip.github.io/deconflate/reference/set_three_way.md)
+  and
+  [`set_interaction()`](https://rasmussenphilip.github.io/deconflate/reference/set_interaction.md)
+  now add rows); old files are recognised and reported.
+- **Estimands are decided by `adjusted_for`.** An impact or association
+  row is crude when `adjusted_for` is empty, and adjusted for the
+  diseases it names otherwise (`"all"`: every other disease and term).
+  `estimand` is removed. Adjusted associations are odds ratios between
+  two diseases, matched as logistic-regression coefficients; ids that
+  are not diseases of the model (parity, herd) are noted, and a row
+  adjusted only for them is used as crude.
+- **Distribution keys** are `prob:<disease>`, `associations:<row>` and
+  `impacts:<row>`; `assoc:<d1>:<d2>`, `impact:<disease>`,
+  `inter:<d1>:<d2>` and `three:<d1>:<d2>:<d3>` still work when they name
+  one row.
+  [`sensitivity_oat()`](https://rasmussenphilip.github.io/deconflate/reference/sensitivity_oat.md)
+  reports inputs by these keys.
+- **Results:** `$adjusted` has one row per term (diseases, then
+  interactions) with `kind`, `raw` (when the term has one row) and
+  `rows`; `$conflation$A` has one row per impact row; `raw_sum` is `NA`
+  when a disease has several rows. New: `$estimates` (every row with its
+  fitted value and standardised residual), `$heterogeneity` and
+  `$pooling`.
+
+### New features: combinations, subgroups and several rows per item
+
+- **Rows about combinations and subgroups.** Association rows can relate
+  combinations, hold within subgroups and be adjusted for other
+  diseases; the joint distribution matches them all (raking on events).
+  Impact rows about a combination add an interaction (additive, or on
+  the log-hazard scale for event impacts); rows within subgroups and
+  adjusted rows also identify interactions.
+  [`deconflate()`](https://rasmussenphilip.github.io/deconflate/reference/deconflate.md)
+  checks that the rows determine every term and names those they do not.
+  Contributions split each interaction equally among its diseases.
+- **Several rows per item.** Association rows about the same quantity
+  are pooled on the log scale, by random effects (DerSimonian-Laird;
+  default) or fixed effect (`pool = "fixed"`), with Q, I^2 and tau^2 in
+  `$heterogeneity`; draws keep the central weights and add the
+  between-study spread. Impact rows that over-determine the impacts are
+  fitted by weighted least squares (weights 1/SD^2; rows without a
+  distribution are exact).
+- [`simulate_raw_impacts()`](https://rasmussenphilip.github.io/deconflate/reference/simulate_raw_impacts.md)
+  simulates rows of any kind (`rows`), with interactions named by
+  combination (`c("LAM;MAS" = 2)`).
+- The five-disease example has two studies of one odds ratio, an
+  `OR_ratio` row, several rows for one disease, a subgroup row and
+  interaction rows (additive and event). Reference values:
+  `inst/validation/reference_v041.py` (independent Python
+  implementation).
+
+### Breaking changes: one function, one impact table
 
 - **One function, one impact table.**
   [`deconflate()`](https://rasmussenphilip.github.io/deconflate/reference/deconflate.md)
@@ -20,32 +119,25 @@ with one impact table per call.
   and
   [`cm_check_inputs()`](https://rasmussenphilip.github.io/deconflate/reference/cm_check_inputs.md)
   take each table as its own argument (`diseases`, `associations`,
-  `impacts`, and optionally `interactions` and `three_way`), as a path
-  to a CSV file with any name or a data frame. The `dir` argument and
-  the fixed file names are removed.
+  `impacts`), as a path to a CSV file with any name or a data frame. The
+  `dir` argument and the fixed file names are removed.
   [`deconflate()`](https://rasmussenphilip.github.io/deconflate/reference/deconflate.md)
   needs at least one association; the sensitivity tools also run without
   any.
   [`cm_template()`](https://rasmussenphilip.github.io/deconflate/reference/cm_template.md)
   writes one example of each table (`type` is removed).
-- **Pairs without an association are unknown by default.** The global
-  model fills them in from the other associations, and the result lists
-  them with the odds ratios the fit gave them (`$unknown_pairs`). An
-  odds ratio of 1 states that two diseases are unrelated. The argument
+- **Pairs without an association are unknown by default.** The model
+  fills them in from the other associations, and the result lists them
+  with the odds ratios the fit gave them (`$unknown_pairs`). An odds
+  ratio of 1 states that two diseases are unrelated. The argument
   `missing_associations` and the association measures `"independent"`,
   `"unknown"` and `"table"` (with `n11`-`n00`) are removed; old tables
   get a message saying what to write instead. The published analyses
   treated unlisted pairs as independent; the `reproduce_*()` functions
   still do.
-- **`method = "auto"` is the default.** It uses the simultaneous method
-  when every pair has an association and there are no interactions or
-  three-way terms (where the two methods give the same answer), and the
-  global method otherwise, with a note giving the reason.
-  `method = "simultaneous"` switches in the same way; `"global"` always
-  uses the global method. With more than 20 diseases the sampled backend
-  of
+- With more than 20 diseases the sampled backend of
   [`fit_joint()`](https://rasmussenphilip.github.io/deconflate/reference/fit_joint.md)
-  is used automatically.
+  is used automatically (for crude pair rows).
 - **Event impacts run through
   [`deconflate()`](https://rasmussenphilip.github.io/deconflate/reference/deconflate.md).**
   With `event_model = TRUE` and `overall_risk` (a proportion or a
@@ -104,8 +196,10 @@ with one impact table per call.
   [`screen_three_way()`](https://rasmussenphilip.github.io/deconflate/reference/screen_three_way.md),
   [`sensitivity_oat()`](https://rasmussenphilip.github.io/deconflate/reference/sensitivity_oat.md),
   [`cm_threshold()`](https://rasmussenphilip.github.io/deconflate/reference/cm_threshold.md))
-  use `method = "auto"`, support event impacts (`event_model = TRUE`,
-  `overall_risk`), and run on point estimates.
+  adjust each scenario as
+  [`deconflate()`](https://rasmussenphilip.github.io/deconflate/reference/deconflate.md)
+  does, support event impacts (`event_model = TRUE`, `overall_risk`),
+  and run on point estimates.
   [`cm_threshold()`](https://rasmussenphilip.github.io/deconflate/reference/cm_threshold.md)
   reports the methods it used and accepts the input `"risk"`.
 
@@ -379,11 +473,9 @@ changes”).
   works on models, analyses, hazard-ratio models and Monte Carlo runs.
   Methods that cannot be run, and valuations that cannot be evaluated
   for a method, are listed in `failed` with the reason.
-- **Three-way scenarios:**
-  [`cm_three_way()`](https://rasmussenphilip.github.io/deconflate/reference/cm_three_way.md)
-  sets the ratio of conditional odds ratios for a triple (a log-linear
-  three-way term in the global fit, with all pairwise tables still
-  matched);
+- **Three-way scenarios:** `cm_three_way()` sets the ratio of
+  conditional odds ratios for a triple (a log-linear three-way term in
+  the global fit, with all pairwise tables still matched);
   [`set_three_way()`](https://rasmussenphilip.github.io/deconflate/reference/set_three_way.md)
   and
   [`screen_three_way()`](https://rasmussenphilip.github.io/deconflate/reference/screen_three_way.md).
@@ -492,11 +584,11 @@ Checked against the published 2024 analysis code (1st revision) and the
   culling.
 - Added `inst/validation/reference_2024_analysis.py`.
 
-### 0.0.0.9001
+## deconflate 0.0.0.9001
 
 Builds the remaining v0.1 features.
 
-#### Reproduction of the published analyses
+### Reproduction of the published analyses
 
 - Added the UK dairy model of Rasmussen et al. (2022):
   [`example_uk_dairy_2022()`](https://rasmussenphilip.github.io/deconflate/reference/example_uk_dairy_2022.md)
@@ -509,7 +601,7 @@ Builds the remaining v0.1 features.
   impacts reproduce Table 5. The central value of the PERT distributions
   in Tables 2-4 is the mode.
 
-#### Culling and valuation
+### Culling and valuation
 
 - Added `hr_conversion()`, `as_impacts()` and `adjusted_hr()`, which
   take culling hazard ratios through to adjusted hazard ratios. They
@@ -518,7 +610,7 @@ Builds the remaining v0.1 features.
 - Added `value_losses()` to value gaps in money, and `combine_impacts()`
   to stack impact tables.
 
-#### Uncertainty
+### Uncertainty
 
 - Added input distributions:
   [`dist_fixed()`](https://rasmussenphilip.github.io/deconflate/reference/distributions.md),
@@ -546,7 +638,7 @@ Builds the remaining v0.1 features.
 - Parameter keys are now `prob:<id>`, `assoc:<d1>:<d2>`,
   `impact:<outcome>:<disease>` and `inter:<outcome>:<d1>:<d2>`.
 
-#### Feasibility, attribution and sensitivity
+### Feasibility, attribution and sensitivity
 
 - Added
   [`check_feasibility()`](https://rasmussenphilip.github.io/deconflate/reference/check_feasibility.md).
@@ -569,7 +661,7 @@ Builds the remaining v0.1 features.
   [`set_interaction()`](https://rasmussenphilip.github.io/deconflate/reference/set_interaction.md)
   for editing models.
 
-#### Reporting
+### Reporting
 
 - Added
   [`contribution_table()`](https://rasmussenphilip.github.io/deconflate/reference/contribution_table.md),
@@ -580,13 +672,13 @@ Builds the remaining v0.1 features.
   [`plot_burden()`](https://rasmussenphilip.github.io/deconflate/reference/plots.md).
 - Added four vignettes and a pkgdown configuration.
 
-#### Other changes
+### Other changes
 
 - [`pair_tables()`](https://rasmussenphilip.github.io/deconflate/reference/pair_tables.md)
   is vectorised, which makes Monte Carlo runs faster.
 - Hazard ratios of exactly 1 now give exactly zero excess risk.
 
-### 0.0.0.9000
+## deconflate 0.0.0.9000
 
 - Initial skeleton: input constructors, the three adjustment methods,
   the joint distribution, productivity gaps, Shapley attribution for

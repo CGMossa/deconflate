@@ -1,9 +1,10 @@
-# Describe statistical associations between disease pairs
+# Describe associations between diseases
 
-Each row gives one association measure for one pair of diseases. A pair
-without a row is unknown: the global model
-([`fit_joint()`](https://rasmussenphilip.github.io/deconflate/reference/fit_joint.md))
-fills in its association from the others (see
+Each row is one estimate from a study: an association between two
+diseases, or between combinations of diseases, possibly within a
+subgroup or adjusted for other diseases. Several rows can describe the
+same association (they are pooled). Pairs that no row mentions are
+unknown: the model fills in their association from the others (see
 [`deconflate()`](https://rasmussenphilip.github.io/deconflate/reference/deconflate.md)).
 To state that two diseases are unrelated, give the pair an odds ratio of
 1.
@@ -12,21 +13,24 @@ To state that two diseases are unrelated, give the pair an odds ratio of
 
 ``` r
 cm_associations(
-  disease1,
-  disease2,
+  disease,
+  associated_with = NA_character_,
   value,
   measure = "OR",
-  adjusted = FALSE,
+  ...,
+  among = NA_character_,
   adjusted_for = NA_character_,
-  source = NA_character_
+  study = NA_character_,
+  source = NA_character_,
+  note = NA_character_
 )
 ```
 
 ## Arguments
 
-- disease1, disease2:
+- disease, associated_with:
 
-  Character vectors of disease ids.
+  Disease ids or combinations (`"a;b"`).
 
 - value:
 
@@ -34,59 +38,84 @@ cm_associations(
 
 - measure:
 
-  Character, one per row (or recycled). Directional measures treat
-  `disease1` as the outcome and `disease2` as the conditioning disease:
+  Character, one per row or recycled (see What a row means).
 
-  - `"OR"` (default): odds ratio (symmetric). An odds ratio of 1 means
-    the two diseases are independent.
+- ...:
 
-  - `"RR"`: risk ratio `P(d1 | d2) / P(d1 | not d2)`.
+  Not used (arguments of earlier versions give a message). The arguments
+  after it must be named.
 
-  - `"RD"`: risk difference `P(d1 | d2) - P(d1 | not d2)`.
+- among:
 
-  - `"cond_prob"`: conditional probability `P(d1 | d2)`.
-
-  - `"phi"`: binary (phi) correlation coefficient (symmetric).
-
-  For a study's 2x2 table, compute its odds ratio,
-  `n11 * n00 / (n10 * n01)`, and enter it as an odds ratio.
-
-- adjusted:
-
-  Logical: was the measure adjusted for covariates (e.g. an odds ratio
-  from multivariable logistic regression)? The 2x2 algebra needs
-  marginal (crude) measures, so
-  [`cm_population()`](https://rasmussenphilip.github.io/deconflate/reference/cm_population.md)
-  rejects adjusted measures unless told to use them as marginal.
+  Optional subgroups (see What a row means).
 
 - adjusted_for:
 
-  Optional description of the adjustment set.
+  Optional adjustment sets (see What a row means).
 
-- source:
+- study, source, note:
 
-  Optional citation.
+  Optional study label (used in diagnostics), citation and free-text
+  note.
 
 ## Value
 
-A `cm_associations` data frame.
+A `cm_associations` data frame (with the row number of each row in
+column `row`).
 
-## Details
+## What a row means
 
-Odds ratios (and the other measures) are applied to the modelled
-population's own marginal probabilities ("transported"). This assumes
-the measure is the same in the source study and in the modelled
-population.
+`disease` (G) is the outcome and `associated_with` (H) the comparison:
+animals with all of H against animals with none of H (for one disease,
+with against without). Each can be one disease or a combination, with
+ids separated by `";"` (e.g. `"MAS;SCK"`). `among` narrows the
+population to a subgroup: ids that are present (`"SCK"`), absent
+(`"no SCK"`), both (`"SCK;no MET"`), or `"no others"` (none of the
+diseases not named in the row).
+
+- `"OR"` (default), `"RR"`, `"RD"`, `"phi"`: odds ratio, risk ratio
+  `P(G | H) / P(G | no H)`, risk difference and phi correlation of the
+  2x2 table of G by H, within `among`.
+
+- `"prevalence"`: `P(G | H)` within `among`; without `associated_with`,
+  the prevalence of G (a combination, or a disease within a subgroup).
+  The prevalence of one disease in the whole population belongs in
+  [`cm_diseases()`](https://rasmussenphilip.github.io/deconflate/reference/cm_diseases.md).
+
+- `"OR_ratio"`: the odds ratio of G and H among `among` divided by their
+  odds ratio among the complement of `among` (one disease, present or
+  absent): how much a third disease changes an association, as a study
+  that reports stratum-specific odds ratios would give it.
+
+`adjusted_for`: an odds ratio adjusted for other diseases of the model
+(ids separated by `";"`, or `"all"` for every other disease), from a
+logistic regression of G on H and those diseases, is an exact
+conditional association and is used as such (G and H must be single
+diseases). Names that are not diseases of the model (e.g. `"parity"`)
+are factors outside the model: they are ignored, with a note, and a row
+adjusted only for them is used as a crude association.
+
+Measures are applied to the modelled population's own probabilities
+("transported"): this assumes the measure is the same in the source
+study and in the modelled population.
 
 ## Examples
 
 ``` r
-cm_associations(c("d1", "d2"), c("d2", "d3"), c(2, 3), measure = "OR")
-#>   disease1 disease2 measure value adjusted adjusted_for source
-#> 1       d1       d2      OR     2    FALSE         <NA>   <NA>
-#> 2       d2       d3      OR     3    FALSE         <NA>   <NA>
-# Two diseases stated to be unrelated
-cm_associations("d1", "d3", 1)
-#>   disease1 disease2 measure value adjusted adjusted_for source
-#> 1       d1       d3      OR     1    FALSE         <NA>   <NA>
+cm_associations(c("d1", "d2"), c("d2", "d3"), c(2, 3))
+#>   row disease associated_with among adjusted_for measure value study source
+#> 1   1      d1              d2  <NA>         <NA>      OR     2  <NA>   <NA>
+#> 2   2      d2              d3  <NA>         <NA>      OR     3  <NA>   <NA>
+#>   note
+#> 1 <NA>
+#> 2 <NA>
+# An odds ratio within a subgroup, and how much d3 changes it
+cm_associations(c("d1", "d1"), c("d2", "d2"), c(2.5, 1.8),
+                measure = c("OR", "OR_ratio"), among = c("d3", "d3"))
+#>   row disease associated_with among adjusted_for  measure value study source
+#> 1   1      d1              d2    d3         <NA>       OR   2.5  <NA>   <NA>
+#> 2   2      d1              d2    d3         <NA> OR_ratio   1.8  <NA>   <NA>
+#>   note
+#> 1 <NA>
+#> 2 <NA>
 ```

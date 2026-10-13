@@ -23,7 +23,7 @@
     <li><a class="dropdown-item" href="../articles/thresholds-and-scaling.html">Threshold searches and many diseases</a></li>
     <li><a class="dropdown-item" href="../articles/event-impacts.html">Event impacts (culling and mortality)</a></li>
     <li><a class="dropdown-item" href="../articles/reproducing-published.html">Reproducing the published analyses</a></li>
-    <li><a class="dropdown-item" href="../articles/interactions.html">Disease combinations, interactions and attribution</a></li>
+    <li><a class="dropdown-item" href="../articles/interactions.html">Disease combinations, subgroups and interactions</a></li>
     <li><a class="dropdown-item" href="../articles/uncertainty.html">Uncertainty and sensitivity</a></li>
   </ul></li>
 <li class="nav-item"><a class="nav-link" href="../news/index.html">Changelog</a></li>
@@ -57,7 +57,9 @@
 
 
 <dl><dt id="arg-measure">measure<a class="anchor" aria-label="anchor" href="#arg-measure"></a></dt>
-<dd><p>One of the measures in <code><a href="cm_associations.html">cm_associations()</a></code>.</p></dd>
+<dd><p><code>"OR"</code>, <code>"RR"</code>, <code>"RD"</code>, <code>"phi"</code> or <code>"prevalence"</code> (see
+<code><a href="cm_associations.html">cm_associations()</a></code>; the directional measures treat disease 1 as the
+outcome and disease 2 as the comparison).</p></dd>
 
 
 <dt id="arg-value">value<a class="anchor" aria-label="anchor" href="#arg-value"></a></dt>
@@ -65,7 +67,7 @@
 
 
 <dt id="arg-p-p-">p1, p2<a class="anchor" aria-label="anchor" href="#arg-p-p-"></a></dt>
-<dd><p>Marginal probabilities of <code>disease1</code> and <code>disease2</code>.</p></dd>
+<dd><p>Marginal probabilities of disease 1 and disease 2.</p></dd>
 
 </dl></div>
     <div class="section level2">

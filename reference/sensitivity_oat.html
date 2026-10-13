@@ -29,7 +29,7 @@ attributable to disease for event impacts."></head><body>
     <li><a class="dropdown-item" href="../articles/thresholds-and-scaling.html">Threshold searches and many diseases</a></li>
     <li><a class="dropdown-item" href="../articles/event-impacts.html">Event impacts (culling and mortality)</a></li>
     <li><a class="dropdown-item" href="../articles/reproducing-published.html">Reproducing the published analyses</a></li>
-    <li><a class="dropdown-item" href="../articles/interactions.html">Disease combinations, interactions and attribution</a></li>
+    <li><a class="dropdown-item" href="../articles/interactions.html">Disease combinations, subgroups and interactions</a></li>
     <li><a class="dropdown-item" href="../articles/uncertainty.html">Uncertainty and sensitivity</a></li>
   </ul></li>
 <li class="nav-item"><a class="nav-link" href="../news/index.html">Changelog</a></li>
@@ -60,11 +60,11 @@ attributable to disease for event impacts.</p>
     <h2 id="ref-usage">Usage<a class="anchor" aria-label="anchor" href="#ref-usage"></a></h2>
     <div class="sourceCode"><pre class="sourceCode r"><code><span><span class="fu">sensitivity_oat</span><span class="op">(</span></span>
 <span>  <span class="va">model</span>,</span>
-<span>  method <span class="op">=</span> <span class="st">"auto"</span>,</span>
 <span>  event_model <span class="op">=</span> <span class="cn">FALSE</span>,</span>
 <span>  overall_risk <span class="op">=</span> <span class="cn">NULL</span>,</span>
 <span>  variation <span class="op">=</span> <span class="fl">0.2</span>,</span>
-<span>  inputs <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"prob"</span>, <span class="st">"assoc"</span>, <span class="st">"impact"</span>, <span class="st">"risk"</span><span class="op">)</span></span>
+<span>  inputs <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"prob"</span>, <span class="st">"assoc"</span>, <span class="st">"impact"</span>, <span class="st">"risk"</span><span class="op">)</span>,</span>
+<span>  <span class="va">...</span></span>
 <span><span class="op">)</span></span></code></pre></div>
     </div>
 
@@ -76,7 +76,7 @@ attributable to disease for event impacts.</p>
 <dd><p>A <code><a href="cm_model.html">cm_model()</a></code>.</p></dd>
 
 
-<dt id="arg-method-event-model-overall-risk">method, event_model, overall_risk<a class="anchor" aria-label="anchor" href="#arg-method-event-model-overall-risk"></a></dt>
+<dt id="arg-event-model-overall-risk">event_model, overall_risk<a class="anchor" aria-label="anchor" href="#arg-event-model-overall-risk"></a></dt>
 <dd><p>As in <code><a href="deconflate.html">deconflate()</a></code>.</p></dd>
 
 
@@ -85,29 +85,36 @@ attributable to disease for event impacts.</p>
 
 
 <dt id="arg-inputs">inputs<a class="anchor" aria-label="anchor" href="#arg-inputs"></a></dt>
-<dd><p>Which inputs to vary: <code>"prob"</code>, <code>"assoc"</code>, <code>"impact"</code>, and
-for event impacts <code>"risk"</code> (the overall risk).</p></dd>
+<dd><p>Which inputs to vary: <code>"prob"</code> (disease probabilities),
+<code>"assoc"</code> (association rows), <code>"impact"</code> (impact rows), and for event
+impacts <code>"risk"</code> (the overall risk).</p></dd>
+
+
+<dt id="arg--">...<a class="anchor" aria-label="anchor" href="#arg--"></a></dt>
+<dd><p>Not used.</p></dd>
 
 </dl></div>
     <div class="section level2">
     <h2 id="value">Value<a class="anchor" aria-label="anchor" href="#value"></a></h2>
-    <p>A <code>cm_oat</code> data frame with one row per input: the input key,
-totals at the low and high values and the swing, sorted by swing.</p>
+    <p>A <code>cm_oat</code> data frame with one row per input: the input key
+(<code>"prob:&lt;disease&gt;"</code>, <code>"associations:&lt;row&gt;"</code>, <code>"impacts:&lt;row&gt;"</code> or
+<code>"risk"</code>), totals at the low and high values and the swing, sorted by
+swing.</p>
     </div>
 
     <div class="section level2">
     <h2 id="ref-examples">Examples<a class="anchor" aria-label="anchor" href="#ref-examples"></a></h2>
     <div class="sourceCode"><pre class="sourceCode r"><code><span class="r-in"><span><span class="fu">sensitivity_oat</span><span class="op">(</span><span class="fu"><a href="example_supplement.html">example_supplement</a></span><span class="op">(</span><span class="op">)</span><span class="op">)</span></span></span>
-<span class="r-out co"><span class="r-pr">#&gt;</span>         input value total_low total_high      swing  rel_swing</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> 1   impact:d3  7.50  1.844070   2.374387 0.53031715 0.25142703</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> 2     prob:d3  0.20  1.851628   2.374637 0.52300893 0.24796215</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> 3   impact:d2  5.00  1.998423   2.220035 0.22161264 0.10506809</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> 4     prob:d2  0.15  2.026335   2.197276 0.17094138 0.08104449</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> 5 assoc:d2:d3  3.00  2.170224   2.062015 0.10820854 0.05130242</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> 6   impact:d1  2.50  2.063348   2.155110 0.09176175 0.04350488</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> 7     prob:d1  0.10  2.069218   2.149697 0.08047878 0.03815555</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> 8 assoc:d1:d3  1.00  2.138876   2.084124 0.05475254 0.02595856</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> 9 assoc:d1:d2  2.00  2.127728   2.093846 0.03388228 0.01606382</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span>            input value total_low total_high      swing  rel_swing</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 1      impacts:3  7.50  1.844070   2.374387 0.53031715 0.25142703</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 2        prob:d3  0.20  1.851628   2.374637 0.52300893 0.24796215</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 3      impacts:2  5.00  1.998423   2.220035 0.22161264 0.10506809</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 4        prob:d2  0.15  2.026335   2.197276 0.17094138 0.08104449</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 5 associations:3  3.00  2.170224   2.062015 0.10820854 0.05130242</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 6      impacts:1  2.50  2.063348   2.155110 0.09176175 0.04350488</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 7        prob:d1  0.10  2.069218   2.149697 0.08047878 0.03815555</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 8 associations:2  1.00  2.138876   2.084124 0.05475254 0.02595856</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 9 associations:1  2.00  2.127728   2.093846 0.03388228 0.01606382</span>
 </code></pre></div>
     </div>
   </main><aside class="col-md-3"><nav id="toc" aria-label="Table of contents"><h2>On this page</h2>

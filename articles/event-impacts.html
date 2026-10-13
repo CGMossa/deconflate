@@ -38,7 +38,7 @@
     <li><a class="dropdown-item" href="../articles/thresholds-and-scaling.html">Threshold searches and many diseases</a></li>
     <li><a class="dropdown-item" href="../articles/event-impacts.html">Event impacts (culling and mortality)</a></li>
     <li><a class="dropdown-item" href="../articles/reproducing-published.html">Reproducing the published analyses</a></li>
-    <li><a class="dropdown-item" href="../articles/interactions.html">Disease combinations, interactions and attribution</a></li>
+    <li><a class="dropdown-item" href="../articles/interactions.html">Disease combinations, subgroups and interactions</a></li>
     <li><a class="dropdown-item" href="../articles/uncertainty.html">Uncertainty and sensitivity</a></li>
   </ul>
 </li>
@@ -84,11 +84,10 @@ impacts</strong>, and <code><a href="../reference/deconflate.html">deconflate()<
 separate model, the snapshot hazard model, when called with
 <code>event_model = TRUE</code>.</p>
 <p>All five measures are mapped onto the same model, so they can be
-mixed in one impact table (one row per disease): an HR for one disease,
-a risk difference for another. The result is the same for every measure:
-an adjusted hazard ratio per disease (its own hazard multiplier), and
-the risk of the event attributable to disease, allocated to
-diseases.</p>
+mixed in one impact table: an HR for one disease, a risk difference for
+another. The result is the same for every measure: an adjusted hazard
+ratio per disease (its own hazard multiplier), and the risk of the event
+attributable to disease, allocated to diseases.</p>
 <div class="section level2">
 <h2 id="describing-event-impacts">Describing event impacts<a class="anchor" aria-label="anchor" href="#describing-event-impacts"></a>
 </h2>
@@ -96,33 +95,33 @@ diseases.</p>
 <code>measure</code> column: <code>"HR"</code>,
 <code>"rate_ratio"</code>, <code>"RR"</code>, <code>"OR"</code> or
 <code>"RD"</code>. Every disease needs a row (1 for no effect on a ratio
-scale, 0 for a risk difference). The estimand must be stated; there is
-no default, because it is an assumption about what the source estimate
-measures (see below):</p>
+scale, 0 for a risk difference). As for additive impacts, a row is crude
+unless <code>adjusted_for</code> names other diseases, it can be about a
+combination of diseases (an interaction) or hold within a subgroup
+(<code>among</code>), and a disease can have several rows (see
+<code><a href="../reference/cm_impacts.html">?cm_impacts</a></code>):</p>
 <div class="sourceCode" id="cb2"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">pop</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/example_supplement.html">example_supplement</a></span><span class="op">(</span><span class="op">)</span>   <span class="co"># its yield impacts are not used here</span></span>
 <span><span class="va">cull</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/cm_model.html">cm_model</a></span><span class="op">(</span><span class="va">pop</span>, <span class="fu"><a href="../reference/cm_impacts.html">cm_impacts</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"d1"</span>, <span class="st">"d2"</span>, <span class="st">"d3"</span><span class="op">)</span>, <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="fl">1.5</span>, <span class="fl">2.0</span>, <span class="fl">1.3</span><span class="op">)</span>, measure <span class="op">=</span> <span class="st">"HR"</span>,</span>
-<span>                                 estimand <span class="op">=</span> <span class="st">"snapshot_crude"</span>, label <span class="op">=</span> <span class="st">"culling"</span><span class="op">)</span><span class="op">)</span></span>
+<span>                                 label <span class="op">=</span> <span class="st">"culling"</span><span class="op">)</span><span class="op">)</span></span>
 <span><span class="va">cull</span></span>
 <span><span class="co">#&gt; &lt;cm_model&gt;</span></span>
 <span><span class="co">#&gt;   Diseases: 3 (d1, d2, d3)</span></span>
-<span><span class="co">#&gt;   Disease pairs: 3 (3 with an association, 0 unknown)</span></span>
+<span><span class="co">#&gt;   Association rows: 3 (OR: 3)</span></span>
+<span><span class="co">#&gt;   Disease pairs: 3 (3 with a crude pair row, 0 unknown)</span></span>
 <span><span class="co">#&gt;   Impacts: culling (event impacts: use event_model = TRUE)</span></span>
-<span><span class="co">#&gt;   Estimands: snapshot_crude: 3</span></span>
-<span><span class="co">#&gt;   Measures: HR: 3</span></span>
-<span><span class="kw"><a href="https://rdrr.io/r/base/conditions.html" class="external-link">tryCatch</a></span><span class="op">(</span><span class="fu"><a href="../reference/cm_impacts.html">cm_impacts</a></span><span class="op">(</span><span class="st">"d1"</span>, <span class="fl">1.5</span>, measure <span class="op">=</span> <span class="st">"HR"</span><span class="op">)</span>,</span>
-<span>         deconflate_error <span class="op">=</span> <span class="kw">function</span><span class="op">(</span><span class="va">e</span><span class="op">)</span> <span class="fu"><a href="https://rdrr.io/r/base/conditions.html" class="external-link">conditionMessage</a></span><span class="op">(</span><span class="va">e</span><span class="op">)</span><span class="op">)</span></span>
-<span><span class="co">#&gt; [1] "State the estimand of event impacts: estimand = \"snapshot_crude\" or \"snapshot_stratified\" (see ?cm_impacts)."</span></span></code></pre></div>
+<span><span class="co">#&gt;   Impact rows: 3 (0 adjusted, 0 within subgroups)</span></span>
+<span><span class="co">#&gt;   Measures: HR: 3</span></span></code></pre></div>
 <p>In a CSV file read by <code>cm_read_inputs(impacts = )</code>, the
 same information is in the columns <code>disease</code>,
-<code>value</code>, <code>measure</code>, <code>estimand</code> and
-<code>adjusted_for</code> (see the five-disease example at the end).</p>
+<code>among</code>, <code>adjusted_for</code>, <code>measure</code> and
+<code>value</code> (see the five-disease example at the end).</p>
 <p><code><a href="../reference/deconflate.html">deconflate()</a></code> needs <code>event_model = TRUE</code> and
 the overall risk of the event:</p>
 <div class="sourceCode" id="cb3"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">res</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/deconflate.html">deconflate</a></span><span class="op">(</span><span class="va">cull</span>, event_model <span class="op">=</span> <span class="cn">TRUE</span>, overall_risk <span class="op">=</span> <span class="fl">0.25</span>, n_draws <span class="op">=</span> <span class="fl">0</span><span class="op">)</span></span>
 <span><span class="va">res</span></span>
-<span><span class="co">#&gt; &lt;cm_event_result&gt; culling; method: snapshot</span></span>
+<span><span class="co">#&gt; &lt;cm_event_result&gt; culling; snapshot</span></span>
 <span><span class="co">#&gt; </span></span>
 <span><span class="co">#&gt;  disease measure raw adjusted_hr</span></span>
 <span><span class="co">#&gt;       d1      HR 1.5       1.383</span></span>
@@ -146,7 +145,7 @@ the overall risk of the event:</p>
 <span><span class="co">#&gt; [1] "These are event impacts (the impact table has a measure column): use event_model = TRUE, with overall_risk."</span></span>
 <span><span class="kw"><a href="https://rdrr.io/r/base/conditions.html" class="external-link">tryCatch</a></span><span class="op">(</span><span class="fu"><a href="../reference/deconflate.html">deconflate</a></span><span class="op">(</span><span class="va">pop</span>, event_model <span class="op">=</span> <span class="cn">TRUE</span>, overall_risk <span class="op">=</span> <span class="fl">0.25</span><span class="op">)</span>,</span>
 <span>         deconflate_error <span class="op">=</span> <span class="kw">function</span><span class="op">(</span><span class="va">e</span><span class="op">)</span> <span class="fu"><a href="https://rdrr.io/r/base/conditions.html" class="external-link">conditionMessage</a></span><span class="op">(</span><span class="va">e</span><span class="op">)</span><span class="op">)</span></span>
-<span><span class="co">#&gt; [1] "event_model = TRUE needs event impacts: an impact table with a measure column (HR, rate_ratio, RR, OR or RD) and snapshot estimands (see ?cm_impacts)."</span></span>
+<span><span class="co">#&gt; [1] "event_model = TRUE needs event impacts: an impact table with a measure column (HR, rate_ratio, RR, OR or RD; see ?cm_impacts)."</span></span>
 <span><span class="kw"><a href="https://rdrr.io/r/base/conditions.html" class="external-link">tryCatch</a></span><span class="op">(</span><span class="fu"><a href="../reference/deconflate.html">deconflate</a></span><span class="op">(</span><span class="va">cull</span>, event_model <span class="op">=</span> <span class="cn">TRUE</span><span class="op">)</span>,</span>
 <span>         deconflate_error <span class="op">=</span> <span class="kw">function</span><span class="op">(</span><span class="va">e</span><span class="op">)</span> <span class="fu"><a href="https://rdrr.io/r/base/conditions.html" class="external-link">conditionMessage</a></span><span class="op">(</span><span class="va">e</span><span class="op">)</span><span class="op">)</span></span>
 <span><span class="co">#&gt; [1] "event_model = TRUE needs `overall_risk`: the overall risk of the event in the population over the period of the estimates (a proportion, e.g. 0.25, or a distribution such as dist_beta(250, 750))."</span></span></code></pre></div>
@@ -171,36 +170,33 @@ or difference of the average risks <code>R</code> among animals with and
 without the disease.</li>
 </ul>
 <p>The adjusted hazard ratios are <code>exp(beta)</code>. The comparison
-is made at the start of the period (the “snapshot”); its estimands are
-defined by the model:</p>
+is made at the start of the period (the “snapshot”):</p>
 <ul>
-<li>
-<code>"snapshot_crude"</code>: the comparison of animals with and
-without the disease at the start of the period, in the population
-described by the probabilities and associations;</li>
-<li>
-<code>"snapshot_stratified"</code>: the same comparison within
-strata of the diseases in <code>adjusted_for</code>, combined across
-strata (see below).</li>
+<li>a crude row compares animals with and without the disease at the
+start of the period, in the population described by the probabilities
+and associations;</li>
+<li>an adjusted row makes the same comparison within strata of the
+diseases in <code>adjusted_for</code>, combined across strata (see
+below).</li>
 </ul>
 <p>Because the model uses the whole distribution of disease
 combinations, it depends on the maximum-entropy assumption of
-<code><a href="../reference/fit_joint.html">fit_joint()</a></code> and on any three-way terms
+<code><a href="../reference/fit_joint.html">fit_joint()</a></code> and on any rows about combinations or
+subgroups, such as <code>OR_ratio</code> rows
 (<code><a href="../articles/interactions.html">vignette("interactions")</a></code>). Pairs without an association
-are unknown, and the fit fills them in, as in the global method for
-additive impacts; the result lists them with their fitted odds ratios
-(<code>$unknown_pairs</code>).</p>
+are unknown, and the fit fills them in; the result lists them with their
+fitted odds ratios (<code>$unknown_pairs</code>).</p>
 <div class="section level3">
 <h3 id="what-the-snapshot-model-is-not">What the snapshot model is not<a class="anchor" aria-label="anchor" href="#what-the-snapshot-model-is-not"></a>
 </h3>
 <p>A Cox HR estimated over follow-up is not, in general, the snapshot
 ratio: animals with high hazards leave first, so the mixture of disease
 combinations among survivors changes over time, and the marginal HR
-changes with it. The snapshot model is exact for its own estimands.
-Entering a published HR as <code>"snapshot_crude"</code> is an
-approximation that you state, not a conversion the package makes. It is
-reasonable when follow-up is short relative to the hazards or the
-diseases are rare, and it should be reported and checked.</p>
+changes with it. The snapshot model is exact for its own comparisons.
+Entering a published HR as a crude row is an approximation that you
+state, not a conversion the package makes. It is reasonable when
+follow-up is short relative to the hazards or the diseases are rare, and
+it should be reported and checked.</p>
 </div>
 </div>
 <div class="section level2">
@@ -225,8 +221,7 @@ change with <code>overall_risk</code>. They must refer to the same
 period as <code>overall_risk</code> (a risk ratio of culling within the
 lactation needs the culling risk over the lactation):</p>
 <div class="sourceCode" id="cb6"><pre class="downlit sourceCode r">
-<code class="sourceCode R"><span><span class="va">cull_rr</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/cm_model.html">cm_model</a></span><span class="op">(</span><span class="va">pop</span>, <span class="fu"><a href="../reference/cm_impacts.html">cm_impacts</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"d1"</span>, <span class="st">"d2"</span>, <span class="st">"d3"</span><span class="op">)</span>, <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="fl">1.4</span>, <span class="fl">1.8</span>, <span class="fl">1.2</span><span class="op">)</span>, measure <span class="op">=</span> <span class="st">"RR"</span>,</span>
-<span>                                    estimand <span class="op">=</span> <span class="st">"snapshot_crude"</span><span class="op">)</span><span class="op">)</span></span>
+<code class="sourceCode R"><span><span class="va">cull_rr</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/cm_model.html">cm_model</a></span><span class="op">(</span><span class="va">pop</span>, <span class="fu"><a href="../reference/cm_impacts.html">cm_impacts</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"d1"</span>, <span class="st">"d2"</span>, <span class="st">"d3"</span><span class="op">)</span>, <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="fl">1.4</span>, <span class="fl">1.8</span>, <span class="fl">1.2</span><span class="op">)</span>, measure <span class="op">=</span> <span class="st">"RR"</span><span class="op">)</span><span class="op">)</span></span>
 <span><span class="fu"><a href="https://rdrr.io/r/base/lapply.html" class="external-link">sapply</a></span><span class="op">(</span><span class="va">risks</span>, <span class="kw">function</span><span class="op">(</span><span class="va">r</span><span class="op">)</span> <span class="op">{</span></span>
 <span>  <span class="fu"><a href="../reference/deconflate.html">deconflate</a></span><span class="op">(</span><span class="va">cull_rr</span>, event_model <span class="op">=</span> <span class="cn">TRUE</span>, overall_risk <span class="op">=</span> <span class="va">r</span>, n_draws <span class="op">=</span> <span class="fl">0</span><span class="op">)</span><span class="op">$</span><span class="va">adjusted</span><span class="op">$</span><span class="va">adjusted</span></span>
 <span><span class="op">}</span><span class="op">)</span></span>
@@ -238,11 +233,10 @@ lactation needs the culling risk over the lactation):</p>
 for every disease cannot hold when half of the animals have the event:
 animals with d2 would need a risk above 1.</p>
 <div class="sourceCode" id="cb7"><pre class="downlit sourceCode r">
-<code class="sourceCode R"><span><span class="va">cull_rr4</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/cm_model.html">cm_model</a></span><span class="op">(</span><span class="va">pop</span>, <span class="fu"><a href="../reference/cm_impacts.html">cm_impacts</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"d1"</span>, <span class="st">"d2"</span>, <span class="st">"d3"</span><span class="op">)</span>, <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="fl">4</span>, <span class="fl">4</span>, <span class="fl">4</span><span class="op">)</span>, measure <span class="op">=</span> <span class="st">"RR"</span>,</span>
-<span>                                     estimand <span class="op">=</span> <span class="st">"snapshot_crude"</span><span class="op">)</span><span class="op">)</span></span>
+<code class="sourceCode R"><span><span class="va">cull_rr4</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/cm_model.html">cm_model</a></span><span class="op">(</span><span class="va">pop</span>, <span class="fu"><a href="../reference/cm_impacts.html">cm_impacts</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"d1"</span>, <span class="st">"d2"</span>, <span class="st">"d3"</span><span class="op">)</span>, <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="fl">4</span>, <span class="fl">4</span>, <span class="fl">4</span><span class="op">)</span>, measure <span class="op">=</span> <span class="st">"RR"</span><span class="op">)</span><span class="op">)</span></span>
 <span><span class="kw"><a href="https://rdrr.io/r/base/conditions.html" class="external-link">tryCatch</a></span><span class="op">(</span><span class="fu"><a href="../reference/deconflate.html">deconflate</a></span><span class="op">(</span><span class="va">cull_rr4</span>, event_model <span class="op">=</span> <span class="cn">TRUE</span>, overall_risk <span class="op">=</span> <span class="fl">0.5</span>, n_draws <span class="op">=</span> <span class="fl">0</span><span class="op">)</span>,</span>
 <span>         deconflate_error <span class="op">=</span> <span class="kw">function</span><span class="op">(</span><span class="va">e</span><span class="op">)</span> <span class="fu"><a href="https://rdrr.io/r/base/conditions.html" class="external-link">conditionMessage</a></span><span class="op">(</span><span class="va">e</span><span class="op">)</span><span class="op">)</span></span>
-<span><span class="co">#&gt; [1] "Could not solve the snapshot model (max residual 5.75e-01): the estimates may be incompatible with the overall risk or with each other."</span></span></code></pre></div>
+<span><span class="co">#&gt; [1] "Could not solve the snapshot model (max residual of the exact rows 5.75e-01): the estimates may be incompatible with the overall risk or with each other."</span></span></code></pre></div>
 <p>The overall risk can be uncertain: give it as a distribution, and
 <code><a href="../reference/deconflate.html">deconflate()</a></code> draws it with the other uncertain inputs
 (<code><a href="../articles/uncertainty.html">vignette("uncertainty")</a></code>). Here only the overall risk is
@@ -252,7 +246,7 @@ The central estimate uses the mean of the distribution:</p>
 <div class="sourceCode" id="cb8"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="fu"><a href="../reference/deconflate.html">deconflate</a></span><span class="op">(</span><span class="va">cull</span>, event_model <span class="op">=</span> <span class="cn">TRUE</span>, overall_risk <span class="op">=</span> <span class="fu"><a href="../reference/distributions.html">dist_beta</a></span><span class="op">(</span><span class="fl">250</span>, <span class="fl">750</span><span class="op">)</span>,</span>
 <span>           n_draws <span class="op">=</span> <span class="fl">200</span>, seed <span class="op">=</span> <span class="fl">1</span><span class="op">)</span></span>
-<span><span class="co">#&gt; &lt;cm_event_result&gt; culling; method: snapshot</span></span>
+<span><span class="co">#&gt; &lt;cm_event_result&gt; culling; snapshot</span></span>
 <span><span class="co">#&gt; </span></span>
 <span><span class="co">#&gt;  disease measure raw adjusted_hr lower upper</span></span>
 <span><span class="co">#&gt;       d1      HR 1.5       1.383 1.383 1.383</span></span>
@@ -274,31 +268,55 @@ The central estimate uses the mean of the distribution:</p>
 <h2 id="estimates-adjusted-for-other-diseases">Estimates adjusted for other diseases<a class="anchor" aria-label="anchor" href="#estimates-adjusted-for-other-diseases"></a>
 </h2>
 <p>If a source estimate comes from a model that already included other
-diseases, the closest snapshot estimand is
-<code>"snapshot_stratified"</code>, with those diseases in
-<code>adjusted_for</code> (ids separated by <code>";"</code>), or
-<code>"all"</code> for every other disease. The model value of such an
-estimate is computed within strata of its adjustment set and combined
-across strata with Mantel-Haenszel-type weights. With
-<code>adjusted_for = "all"</code>, a hazard ratio is the disease’s own
-hazard multiplier and is used as it is. A Cox coefficient adjusted for
-the same diseases matches this only under the snapshot model’s
-assumptions:</p>
+diseases, enter those diseases in <code>adjusted_for</code> (ids
+separated by <code>";"</code>), or <code>"all"</code> for every other
+disease. The model value of such an estimate is computed within strata
+of its adjustment set and combined across strata with
+Mantel-Haenszel-type weights. With <code>adjusted_for = "all"</code>, a
+hazard ratio is the disease’s own hazard multiplier and is used as it
+is. A Cox coefficient adjusted for the same diseases matches this only
+under the snapshot model’s assumptions:</p>
 <div class="sourceCode" id="cb9"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">cull_adj</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/cm_model.html">cm_model</a></span><span class="op">(</span><span class="va">pop</span>, <span class="fu"><a href="../reference/cm_impacts.html">cm_impacts</a></span><span class="op">(</span></span>
 <span>  <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"d1"</span>, <span class="st">"d2"</span>, <span class="st">"d3"</span><span class="op">)</span>, <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="fl">1.5</span>, <span class="fl">2.0</span>, <span class="fl">1.3</span><span class="op">)</span>, measure <span class="op">=</span> <span class="st">"HR"</span>,</span>
-<span>  estimand <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"snapshot_stratified"</span>, <span class="st">"snapshot_crude"</span>, <span class="st">"snapshot_stratified"</span><span class="op">)</span>,</span>
 <span>  adjusted_for <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"d2"</span>, <span class="cn">NA</span>, <span class="st">"all"</span><span class="op">)</span></span>
 <span><span class="op">)</span><span class="op">)</span></span>
 <span><span class="fu"><a href="../reference/deconflate.html">deconflate</a></span><span class="op">(</span><span class="va">cull_adj</span>, event_model <span class="op">=</span> <span class="cn">TRUE</span>, overall_risk <span class="op">=</span> <span class="fl">0.25</span>, n_draws <span class="op">=</span> <span class="fl">0</span><span class="op">)</span><span class="op">$</span><span class="va">adjusted</span></span>
-<span><span class="co">#&gt;   disease measure raw adjusted       change            estimand adjusted_for</span></span>
-<span><span class="co">#&gt; 1      d1      HR 1.5 1.509402  0.006268033 snapshot_stratified           d2</span></span>
-<span><span class="co">#&gt; 2      d2      HR 2.0 1.821704 -0.089148021      snapshot_crude         &lt;NA&gt;</span></span>
-<span><span class="co">#&gt; 3      d3      HR 1.3 1.300000  0.000000000 snapshot_stratified          all</span></span></code></pre></div>
+<span><span class="co">#&gt;   disease    kind measure raw adjusted       change rows</span></span>
+<span><span class="co">#&gt; 1      d1 disease      HR 1.5 1.509402  0.006268033    1</span></span>
+<span><span class="co">#&gt; 2      d2 disease      HR 2.0 1.821704 -0.089148021    1</span></span>
+<span><span class="co">#&gt; 3      d3 disease      HR 1.3 1.300000  0.000000000    1</span></span></code></pre></div>
 <p>The estimate of d1 is a ratio within strata of d2 that still averages
 over d3, which it is not adjusted for. Hazard ratios are not
 collapsible, so it differs slightly from d1’s own hazard multiplier, the
 adjusted HR (1.509 against the estimate of 1.5).</p>
+</div>
+<div class="section level2">
+<h2 id="interactions">Interactions<a class="anchor" aria-label="anchor" href="#interactions"></a>
+</h2>
+<p>A row about a combination of diseases adds an interaction on the
+log-hazard scale: the hazard of an animal with all of its diseases is
+multiplied by an extra factor. A crude row compares animals with all of
+the diseases with animals with none of them; a hazard ratio adjusted for
+<code>"all"</code> is the extra factor itself. Here a study compared
+cows with both d1 and d2 against cows with neither:</p>
+<div class="sourceCode" id="cb10"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="va">cull_int</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/cm_model.html">cm_model</a></span><span class="op">(</span><span class="va">pop</span>, <span class="fu"><a href="../reference/cm_impacts.html">cm_impacts</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"d1"</span>, <span class="st">"d2"</span>, <span class="st">"d3"</span>, <span class="st">"d1;d2"</span><span class="op">)</span>, <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="fl">1.5</span>, <span class="fl">2.0</span>, <span class="fl">1.3</span>, <span class="fl">3.5</span><span class="op">)</span>,</span>
+<span>                                     measure <span class="op">=</span> <span class="st">"HR"</span>, label <span class="op">=</span> <span class="st">"culling"</span><span class="op">)</span><span class="op">)</span></span>
+<span><span class="va">res_int</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/deconflate.html">deconflate</a></span><span class="op">(</span><span class="va">cull_int</span>, event_model <span class="op">=</span> <span class="cn">TRUE</span>, overall_risk <span class="op">=</span> <span class="fl">0.25</span>, n_draws <span class="op">=</span> <span class="fl">0</span><span class="op">)</span></span>
+<span><span class="va">res_int</span><span class="op">$</span><span class="va">adjusted</span></span>
+<span><span class="co">#&gt;   disease        kind measure raw adjusted     change rows</span></span>
+<span><span class="co">#&gt; 1      d1     disease      HR 1.5 1.053530 -0.2976465    1</span></span>
+<span><span class="co">#&gt; 2      d2     disease      HR 2.0 1.667687 -0.1661565    1</span></span>
+<span><span class="co">#&gt; 3      d3     disease      HR 1.3 1.145602 -0.1187680    1</span></span>
+<span><span class="co">#&gt; 4   d1;d2 interaction      HR 3.5 1.942295         NA    1</span></span>
+<span><span class="va">res_int</span><span class="op">$</span><span class="va">attributable</span><span class="op">$</span><span class="va">by_disease</span></span>
+<span><span class="co">#&gt;   disease attributable     share</span></span>
+<span><span class="co">#&gt; 1      d1  0.003783664 0.1237686</span></span>
+<span><span class="co">#&gt; 2      d2  0.020905587 0.6838491</span></span>
+<span><span class="co">#&gt; 3      d3  0.005881215 0.1923822</span></span></code></pre></div>
+<p>The interaction’s share of the attributable risk is split between its
+diseases, as part of their Shapley values.</p>
 </div>
 <div class="section level2">
 <h2 id="risk-attributable-to-disease">Risk attributable to disease<a class="anchor" aria-label="anchor" href="#risk-attributable-to-disease"></a>
@@ -311,12 +329,12 @@ risks when diseases co-occur. It is allocated to diseases by Shapley
 values over all disease combinations (<code><a href="../reference/shapley_by_cell.html">shapley_by_cell()</a></code>);
 the allocation adds up to the attributable risk
 (<code>unallocated</code> is zero up to rounding):</p>
-<div class="sourceCode" id="cb10"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb11"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">res</span><span class="op">$</span><span class="va">attributable</span><span class="op">$</span><span class="va">summary</span></span>
 <span><span class="co">#&gt;   overall_risk disease_free_risk attributable attributable_fraction</span></span>
 <span><span class="co">#&gt; 1         0.25          0.213351   0.03664899             0.1465959</span></span>
-<span><span class="co">#&gt;     unallocated</span></span>
-<span><span class="co">#&gt; 1 -3.469447e-17</span></span>
+<span><span class="co">#&gt;    unallocated</span></span>
+<span><span class="co">#&gt; 1 1.665335e-16</span></span>
 <span><span class="va">res</span><span class="op">$</span><span class="va">attributable</span><span class="op">$</span><span class="va">by_disease</span></span>
 <span><span class="co">#&gt;   disease attributable     share</span></span>
 <span><span class="co">#&gt; 1      d1  0.007370744 0.2011173</span></span>
@@ -335,7 +353,7 @@ model beside two approximations, each with the attributable risk at
 <code>overall_risk</code>:</p>
 <ul>
 <li>
-<code>"snapshot"</code>: the model of
+<code>"deconflate"</code>: the snapshot model of
 <code><a href="../reference/deconflate.html">deconflate()</a></code>;</li>
 <li>
 <code>"first_order"</code>: the log-linear approximation
@@ -350,24 +368,24 @@ et al. 2022) and 1 added back. It is not a method of
 only.</li>
 </ul>
 <p>The first-order and published methods need hazard (or rate) ratios,
-and the published approach crude estimates. Methods that cannot be run
-are listed with the reason:</p>
-<div class="sourceCode" id="cb11"><pre class="downlit sourceCode r">
+and the published approach one crude row per disease. Methods that
+cannot be run are listed with the reason:</p>
+<div class="sourceCode" id="cb12"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="fu"><a href="../reference/compare_methods.html">compare_methods</a></span><span class="op">(</span><span class="va">cull</span>, event_model <span class="op">=</span> <span class="cn">TRUE</span>, overall_risk <span class="op">=</span> <span class="fl">0.25</span><span class="op">)</span></span>
-<span><span class="co">#&gt; &lt;cm_comparison&gt; methods: published, first_order, snapshot</span></span>
+<span><span class="co">#&gt; &lt;cm_comparison&gt; methods: published, first_order, deconflate</span></span>
 <span><span class="co">#&gt; Impacts: culling</span></span>
 <span><span class="co">#&gt; </span></span>
 <span><span class="co">#&gt; Adjusted hazard ratios:</span></span>
-<span><span class="co">#&gt;  disease measure raw published first_order snapshot</span></span>
-<span><span class="co">#&gt;       d1      HR 1.5      1.41        1.40     1.38</span></span>
-<span><span class="co">#&gt;       d2      HR 2.0      1.91        1.89     1.89</span></span>
-<span><span class="co">#&gt;       d3      HR 1.3      1.19        1.17     1.14</span></span>
+<span><span class="co">#&gt;  disease measure raw published first_order deconflate</span></span>
+<span><span class="co">#&gt;       d1      HR 1.5      1.41        1.40       1.38</span></span>
+<span><span class="co">#&gt;       d2      HR 2.0      1.91        1.89       1.89</span></span>
+<span><span class="co">#&gt;       d3      HR 1.3      1.19        1.17       1.14</span></span>
 <span><span class="co">#&gt; </span></span>
 <span><span class="co">#&gt; Totals:</span></span>
 <span><span class="co">#&gt;       method overall_risk disease_free_risk attributable</span></span>
 <span><span class="co">#&gt;    published         0.25            0.2107      0.03934</span></span>
 <span><span class="co">#&gt;  first_order         0.25            0.2122      0.03785</span></span>
-<span><span class="co">#&gt;     snapshot         0.25            0.2134      0.03665</span></span>
+<span><span class="co">#&gt;   deconflate         0.25            0.2134      0.03665</span></span>
 <span><span class="fu"><a href="../reference/compare_methods.html">compare_methods</a></span><span class="op">(</span><span class="va">cull_adj</span>, event_model <span class="op">=</span> <span class="cn">TRUE</span>, overall_risk <span class="op">=</span> <span class="fl">0.25</span><span class="op">)</span><span class="op">$</span><span class="va">failed</span></span>
 <span><span class="co">#&gt;                                                                published </span></span>
 <span><span class="co">#&gt; "The published (2024) approach is defined for crude hazard ratios only."</span></span></code></pre></div>
@@ -382,7 +400,7 @@ Their total is then the attributable risk, and disease rankings use its
 Shapley allocation. They report point estimates (a distribution of the
 overall risk is used at its mean). <code><a href="../reference/sensitivity_oat.html">sensitivity_oat()</a></code> also
 varies the overall risk:</p>
-<div class="sourceCode" id="cb12"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb13"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="fu"><a href="../reference/screen_associations.html">screen_associations</a></span><span class="op">(</span><span class="va">cull</span>, event_model <span class="op">=</span> <span class="cn">TRUE</span>, overall_risk <span class="op">=</span> <span class="fl">0.25</span><span class="op">)</span></span>
 <span><span class="co">#&gt; &lt;cm_screen&gt; 6 scenarios; baseline total 0.03665</span></span>
 <span><span class="co">#&gt;   pair    status scenario  total   change rel_change max_rank_shift rank_corr</span></span>
@@ -400,22 +418,22 @@ varies the overall risk:</p>
 <span><span class="co">#&gt;    &lt;NA&gt;</span></span>
 <span><span class="co">#&gt;    &lt;NA&gt;</span></span>
 <span><span class="fu"><a href="../reference/sensitivity_oat.html">sensitivity_oat</a></span><span class="op">(</span><span class="va">cull</span>, event_model <span class="op">=</span> <span class="cn">TRUE</span>, overall_risk <span class="op">=</span> <span class="fl">0.25</span><span class="op">)</span></span>
-<span><span class="co">#&gt;          input value  total_low total_high        swing  rel_swing</span></span>
-<span><span class="co">#&gt; 1    impact:d3  1.30 0.02889187 0.04351877 0.0146268990 0.39910789</span></span>
-<span><span class="co">#&gt; 2    impact:d2  2.00 0.03045764 0.04211735 0.0116597041 0.31814535</span></span>
-<span><span class="co">#&gt; 3         risk  0.25 0.03068666 0.04186459 0.0111779319 0.30499977</span></span>
-<span><span class="co">#&gt; 4    impact:d1  1.50 0.03224435 0.04056558 0.0083212307 0.22705215</span></span>
-<span><span class="co">#&gt; 5      prob:d2  0.15 0.03313608 0.04027235 0.0071362672 0.19471937</span></span>
-<span><span class="co">#&gt; 6      prob:d1  0.10 0.03539108 0.03791441 0.0025233336 0.06885139</span></span>
-<span><span class="co">#&gt; 7      prob:d3  0.20 0.03558047 0.03778608 0.0022056091 0.06018200</span></span>
-<span><span class="co">#&gt; 8  assoc:d2:d3  3.00 0.03781031 0.03573794 0.0020723758 0.05654661</span></span>
-<span><span class="co">#&gt; 9  assoc:d1:d2  2.00 0.03746031 0.03599871 0.0014616022 0.03988111</span></span>
-<span><span class="co">#&gt; 10 assoc:d1:d3  1.00 0.03703142 0.03632958 0.0007018458 0.01915048</span></span></code></pre></div>
+<span><span class="co">#&gt;             input value  total_low total_high        swing  rel_swing</span></span>
+<span><span class="co">#&gt; 1       impacts:3  1.30 0.02889187 0.04351877 0.0146268990 0.39910789</span></span>
+<span><span class="co">#&gt; 2       impacts:2  2.00 0.03045764 0.04211735 0.0116597041 0.31814535</span></span>
+<span><span class="co">#&gt; 3            risk  0.25 0.03068666 0.04186459 0.0111779319 0.30499977</span></span>
+<span><span class="co">#&gt; 4       impacts:1  1.50 0.03224435 0.04056558 0.0083212307 0.22705215</span></span>
+<span><span class="co">#&gt; 5         prob:d2  0.15 0.03313608 0.04027235 0.0071362672 0.19471937</span></span>
+<span><span class="co">#&gt; 6         prob:d1  0.10 0.03539108 0.03791441 0.0025233336 0.06885139</span></span>
+<span><span class="co">#&gt; 7         prob:d3  0.20 0.03558047 0.03778608 0.0022056091 0.06018200</span></span>
+<span><span class="co">#&gt; 8  associations:3  3.00 0.03781031 0.03573794 0.0020723758 0.05654661</span></span>
+<span><span class="co">#&gt; 9  associations:1  2.00 0.03746031 0.03599871 0.0014616022 0.03988111</span></span>
+<span><span class="co">#&gt; 10 associations:2  1.00 0.03703142 0.03632958 0.0007018458 0.01915048</span></span></code></pre></div>
 <p>In <code><a href="../reference/cm_threshold.html">cm_threshold()</a></code>, the overall risk is the input
 <code>"risk"</code>. At what overall risk does the attributable risk
 reach 0.04, and what raw hazard ratio of d1 would change the ranking of
 diseases?</p>
-<div class="sourceCode" id="cb13"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb14"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="fu"><a href="../reference/cm_threshold.html">cm_threshold</a></span><span class="op">(</span><span class="va">cull</span>, <span class="st">"risk"</span>, <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="fl">0.05</span>, <span class="fl">0.6</span><span class="op">)</span>, conclusion <span class="op">=</span> <span class="st">"total"</span>, target <span class="op">=</span> <span class="fl">0.04</span>,</span>
 <span>             event_model <span class="op">=</span> <span class="cn">TRUE</span>, overall_risk <span class="op">=</span> <span class="fl">0.25</span><span class="op">)</span><span class="op">$</span><span class="va">thresholds</span><span class="op">[</span>, <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"item"</span>, <span class="st">"status"</span>, <span class="st">"threshold"</span><span class="op">)</span><span class="op">]</span></span>
 <span><span class="co">#&gt;    item    status threshold</span></span>
@@ -433,88 +451,96 @@ searches work.</p>
 </h2>
 <p>The folder <code>five_diseases</code> contains an illustrative
 population of five diseases (made-up values) and a culling table,
-<code>culling.csv</code>, that mixes measures and estimands:</p>
-<div class="sourceCode" id="cb14"><pre class="downlit sourceCode r">
+<code>culling.csv</code>, that mixes measures:</p>
+<div class="sourceCode" id="cb15"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">dir</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/system.file.html" class="external-link">system.file</a></span><span class="op">(</span><span class="st">"extdata"</span>, <span class="st">"five_diseases"</span>, package <span class="op">=</span> <span class="st">"deconflate"</span><span class="op">)</span></span>
-<span><span class="fu"><a href="https://rdrr.io/r/utils/read.table.html" class="external-link">read.csv</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/file.path.html" class="external-link">file.path</a></span><span class="op">(</span><span class="va">dir</span>, <span class="st">"culling.csv"</span><span class="op">)</span><span class="op">)</span><span class="op">[</span>, <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"disease"</span>, <span class="st">"value"</span>, <span class="st">"measure"</span>, <span class="st">"estimand"</span>, <span class="st">"adjusted_for"</span><span class="op">)</span><span class="op">]</span></span>
-<span><span class="co">#&gt;   disease value measure            estimand adjusted_for</span></span>
-<span><span class="co">#&gt; 1     LAM  1.74      HR      snapshot_crude             </span></span>
-<span><span class="co">#&gt; 2     MAS  1.60      HR snapshot_stratified      LAM;SCK</span></span>
-<span><span class="co">#&gt; 3     MET  1.23      RR      snapshot_crude             </span></span>
-<span><span class="co">#&gt; 4     SCK  1.45      OR      snapshot_crude             </span></span>
-<span><span class="co">#&gt; 5      RP  0.10      RD snapshot_stratified          all</span></span></code></pre></div>
+<span><span class="fu"><a href="https://rdrr.io/r/utils/read.table.html" class="external-link">read.csv</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/file.path.html" class="external-link">file.path</a></span><span class="op">(</span><span class="va">dir</span>, <span class="st">"culling.csv"</span><span class="op">)</span><span class="op">)</span><span class="op">[</span>, <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"disease"</span>, <span class="st">"adjusted_for"</span>, <span class="st">"measure"</span>, <span class="st">"value"</span><span class="op">)</span><span class="op">]</span></span>
+<span><span class="co">#&gt;   disease adjusted_for measure value</span></span>
+<span><span class="co">#&gt; 1     LAM                   HR  1.74</span></span>
+<span><span class="co">#&gt; 2     MAS      LAM;SCK      HR  1.60</span></span>
+<span><span class="co">#&gt; 3     MET                   RR  1.23</span></span>
+<span><span class="co">#&gt; 4     SCK                   OR  1.45</span></span>
+<span><span class="co">#&gt; 5      RP          all      RD  0.10</span></span>
+<span><span class="co">#&gt; 6 LAM;MAS                   HR  3.20</span></span></code></pre></div>
 <p>LAM has a crude hazard ratio, MAS a hazard ratio stratified by LAM
 and SCK, MET a risk ratio and SCK an odds ratio of culling within the
-lactation, and RP a risk difference stratified by all other diseases.
-The risk-based estimates need the culling risk over the lactation, here
-taken to be 0.25. The population includes a three-way term, which the
-snapshot model uses:</p>
-<div class="sourceCode" id="cb15"><pre class="downlit sourceCode r">
+lactation, RP a risk difference stratified by all other diseases, and
+cows with both LAM and MAS have a crude hazard ratio against cows with
+neither (an interaction). The risk-based estimates need the culling risk
+over the lactation, here taken to be 0.25. The population includes an
+<code>OR_ratio</code> row (LAM and MAS are more strongly associated
+among cows with SCK), which the snapshot model uses:</p>
+<div class="sourceCode" id="cb16"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">five</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/cm_read_inputs.html">cm_read_inputs</a></span><span class="op">(</span>diseases <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/file.path.html" class="external-link">file.path</a></span><span class="op">(</span><span class="va">dir</span>, <span class="st">"diseases.csv"</span><span class="op">)</span>,</span>
 <span>                       associations <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/file.path.html" class="external-link">file.path</a></span><span class="op">(</span><span class="va">dir</span>, <span class="st">"associations.csv"</span><span class="op">)</span>,</span>
-<span>                       three_way <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/file.path.html" class="external-link">file.path</a></span><span class="op">(</span><span class="va">dir</span>, <span class="st">"three_way.csv"</span><span class="op">)</span>,</span>
 <span>                       impacts <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/file.path.html" class="external-link">file.path</a></span><span class="op">(</span><span class="va">dir</span>, <span class="st">"culling.csv"</span><span class="op">)</span><span class="op">)</span></span>
 <span><span class="va">five</span></span>
 <span><span class="co">#&gt; &lt;cm_model&gt;</span></span>
 <span><span class="co">#&gt;   Diseases: 5 (LAM, MAS, MET, SCK, RP)</span></span>
-<span><span class="co">#&gt;   Disease pairs: 10 (10 with an association, 0 unknown)</span></span>
-<span><span class="co">#&gt;   Three-way terms: 1</span></span>
+<span><span class="co">#&gt;   Association rows: 12 (OR: 7; OR_ratio: 1; phi: 1; prevalence: 1; RD: 1; RR: 1)</span></span>
+<span><span class="co">#&gt;   Disease pairs: 10 (10 with a crude pair row, 0 unknown)</span></span>
 <span><span class="co">#&gt;   Impacts: culling (event impacts: use event_model = TRUE)</span></span>
-<span><span class="co">#&gt;   Estimands: snapshot_crude: 3; snapshot_stratified: 2</span></span>
-<span><span class="co">#&gt;   Measures: HR: 2; OR: 1; RD: 1; RR: 1</span></span>
-<span><span class="co">#&gt;   Uncertain inputs (with a distribution): 15</span></span>
+<span><span class="co">#&gt;   Impact rows: 6 (2 adjusted, 0 within subgroups); interactions: LAM;MAS</span></span>
+<span><span class="co">#&gt;   Measures: HR: 3; OR: 1; RD: 1; RR: 1</span></span>
+<span><span class="co">#&gt;   Uncertain inputs (with a distribution): 17</span></span>
 <span><span class="fu"><a href="../reference/deconflate.html">deconflate</a></span><span class="op">(</span><span class="va">five</span>, event_model <span class="op">=</span> <span class="cn">TRUE</span>, overall_risk <span class="op">=</span> <span class="fl">0.25</span>, n_draws <span class="op">=</span> <span class="fl">0</span><span class="op">)</span></span>
-<span><span class="co">#&gt; &lt;cm_event_result&gt; culling; method: snapshot</span></span>
+<span><span class="co">#&gt; &lt;cm_event_result&gt; culling; snapshot</span></span>
 <span><span class="co">#&gt; </span></span>
-<span><span class="co">#&gt;  disease measure  raw adjusted_hr            estimand</span></span>
-<span><span class="co">#&gt;      LAM      HR 1.74       1.583      snapshot_crude</span></span>
-<span><span class="co">#&gt;      MAS      HR 1.60       1.579 snapshot_stratified</span></span>
-<span><span class="co">#&gt;      MET      RR 1.23       1.081      snapshot_crude</span></span>
-<span><span class="co">#&gt;      SCK      OR 1.45       1.191      snapshot_crude</span></span>
-<span><span class="co">#&gt;       RP      RD 0.10       1.502 snapshot_stratified</span></span>
+<span><span class="co">#&gt;  disease measure  raw adjusted_hr</span></span>
+<span><span class="co">#&gt;      LAM      HR 1.74       1.060</span></span>
+<span><span class="co">#&gt;      MAS      HR 1.60       1.234</span></span>
+<span><span class="co">#&gt;      MET      RR 1.23       1.080</span></span>
+<span><span class="co">#&gt;      SCK      OR 1.45       1.175</span></span>
+<span><span class="co">#&gt;       RP      RD 0.10       1.509</span></span>
+<span><span class="co">#&gt;  LAM;MAS      HR 3.20       2.278</span></span>
 <span><span class="co">#&gt; </span></span>
-<span><span class="co">#&gt; Overall risk 0.25; disease-free risk 0.1802; attributable to disease 0.06975 (27.9% of the overall risk)</span></span>
+<span><span class="co">#&gt; Overall risk 0.25; disease-free risk 0.1959; attributable to disease 0.05415 (21.7% of the overall risk)</span></span>
 <span><span class="co">#&gt; </span></span>
 <span><span class="co">#&gt; Attributable risk by disease (Shapley allocation):</span></span>
 <span><span class="co">#&gt;  disease attributable   share</span></span>
-<span><span class="co">#&gt;      LAM     0.024872 0.35658</span></span>
-<span><span class="co">#&gt;      MAS     0.025619 0.36730</span></span>
-<span><span class="co">#&gt;      MET     0.001570 0.02251</span></span>
-<span><span class="co">#&gt;      SCK     0.012331 0.17679</span></span>
-<span><span class="co">#&gt;       RP     0.005358 0.07682</span></span>
+<span><span class="co">#&gt;      LAM     0.013732 0.25360</span></span>
+<span><span class="co">#&gt;      MAS     0.021851 0.40356</span></span>
+<span><span class="co">#&gt;      MET     0.001579 0.02916</span></span>
+<span><span class="co">#&gt;      SCK     0.011474 0.21190</span></span>
+<span><span class="co">#&gt;       RP     0.005511 0.10178</span></span>
 <span><span class="co">#&gt; </span></span>
-<span><span class="co">#&gt; Diagnostics: residual 5.90e-15, condition number 5.07, sign changes 0</span></span></code></pre></div>
+<span><span class="co">#&gt; Diagnostics: residual 1.50e-15, condition number 24.1, sign changes 0</span></span>
+<span><span class="co">#&gt; Pooled or over-determined items: 1 (see $heterogeneity and $estimates)</span></span>
+<span><span class="co">#&gt; </span></span>
+<span><span class="co">#&gt; Notes:</span></span>
+<span><span class="co">#&gt; * Several association rows were pooled for 1 item (random effects; see</span></span>
+<span><span class="co">#&gt;   $heterogeneity).</span></span></code></pre></div>
 <p>The tables have distributions (the <code>dist</code> columns), so the
 default call, without <code>n_draws = 0</code>, would also report 95%
 intervals from 1000 draws. Only the snapshot model applies to these
 measures:</p>
-<div class="sourceCode" id="cb16"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb17"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="fu"><a href="../reference/compare_methods.html">compare_methods</a></span><span class="op">(</span><span class="va">five</span>, event_model <span class="op">=</span> <span class="cn">TRUE</span>, overall_risk <span class="op">=</span> <span class="fl">0.25</span><span class="op">)</span><span class="op">$</span><span class="va">failed</span></span>
-<span><span class="co">#&gt;                                                                                                                    published </span></span>
-<span><span class="co">#&gt;   "The published method needs hazard or rate ratios; risk ratios, odds ratios and risk differences need the snapshot model." </span></span>
-<span><span class="co">#&gt;                                                                                                                  first_order </span></span>
-<span><span class="co">#&gt; "The first-order method needs hazard or rate ratios; risk ratios, odds ratios and risk differences need the snapshot model."</span></span></code></pre></div>
+<span><span class="co">#&gt;                                                                          published </span></span>
+<span><span class="co">#&gt;   "The published method needs one row per disease (no combinations or subgroups)." </span></span>
+<span><span class="co">#&gt;                                                                        first_order </span></span>
+<span><span class="co">#&gt; "The first-order method needs one row per disease (no combinations or subgroups)."</span></span></code></pre></div>
 </div>
 <div class="section level2">
 <h2 id="the-global-dairy-example">The global dairy example<a class="anchor" aria-label="anchor" href="#the-global-dairy-example"></a>
 </h2>
 <p><code>example_global_dairy("culling")</code> contains the culling HRs
 of Rasmussen et al. (2024) on the 12-disease population of that paper.
-They are published Cox HRs, entered as <code>"snapshot_crude"</code>;
-that is an assumption, and the results below hold under it. The global
-average replacement rate is 23.66% (Rasmussen et al. 2024, Table 1).
-Pairs not in the paper’s Table 3 are unknown, and the joint distribution
-fills them in. It is fitted once and passed on with <code>joint</code>,
-so that it can be reused below:</p>
-<div class="sourceCode" id="cb17"><pre class="downlit sourceCode r">
+They are published Cox HRs, entered as crude rows; that is an
+assumption, and the results below hold under it. The global average
+replacement rate is 23.66% (Rasmussen et al. 2024, Table 1). Pairs not
+in the paper’s Table 3 are unknown, and the joint distribution fills
+them in. It is fitted once and passed on with <code>joint</code>, so
+that it can be reused below:</p>
+<div class="sourceCode" id="cb18"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">gd_cull</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/example_global_dairy.html">example_global_dairy</a></span><span class="op">(</span><span class="st">"culling"</span><span class="op">)</span></span>
 <span><span class="va">j_gd</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/fit_joint.html">fit_joint</a></span><span class="op">(</span><span class="va">gd_cull</span><span class="op">)</span></span>
 <span><span class="va">gd</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/deconflate.html">deconflate</a></span><span class="op">(</span><span class="va">gd_cull</span>, event_model <span class="op">=</span> <span class="cn">TRUE</span>, overall_risk <span class="op">=</span> <span class="fl">0.2366</span>, n_draws <span class="op">=</span> <span class="fl">0</span>, joint <span class="op">=</span> <span class="va">j_gd</span><span class="op">)</span></span>
 <span><span class="co">#&gt; Warning: Adjusted hazard ratios are on the other side of 1 from the raw</span></span>
 <span><span class="co">#&gt; estimates for CK, DYS, MET. The raw estimates are weaker than the associated</span></span>
-<span><span class="co">#&gt; diseases alone would produce; check the estimands and source populations.</span></span>
+<span><span class="co">#&gt; diseases alone would produce; check the estimates and source populations.</span></span>
 <span><span class="va">gd</span></span>
-<span><span class="co">#&gt; &lt;cm_event_result&gt; culling; method: snapshot</span></span>
+<span><span class="co">#&gt; &lt;cm_event_result&gt; culling; snapshot</span></span>
 <span><span class="co">#&gt; </span></span>
 <span><span class="co">#&gt;  disease measure   raw adjusted_hr</span></span>
 <span><span class="co">#&gt;       CK      HR 1.500      0.9771</span></span>
@@ -547,8 +573,8 @@ so that it can be reused below:</p>
 <span><span class="co">#&gt;      SCK    0.0341130  0.313999</span></span>
 <span><span class="co">#&gt;      SCM    0.0099293  0.091396</span></span>
 <span><span class="co">#&gt; </span></span>
-<span><span class="co">#&gt; Diagnostics: residual 7.33e-15, condition number 3.82, sign changes 3 (CK, DYS, MET)</span></span>
-<span><span class="co">#&gt; Unknown pairs: 28 without an association; the global fit gave them odds ratios from 1.08 to 2.37 (see $unknown_pairs).</span></span></code></pre></div>
+<span><span class="co">#&gt; Diagnostics: residual 0.00e+00, condition number 3.82, sign changes 3 (CK, DYS, MET)</span></span>
+<span><span class="co">#&gt; Unknown pairs: 28 without an association; the fit gave them odds ratios from 1.08 to 2.37 (see $unknown_pairs).</span></span></code></pre></div>
 <p>For clinical ketosis, dystocia and metritis, the adjusted HRs are
 below 1: under the multiplicative model, their raw HRs are smaller than
 the associated diseases alone would produce, and
@@ -560,7 +586,7 @@ relative to the overall rate,
 risks weighted by prevalence. Applied to the adjusted HRs above, that
 sum is larger than the attributable risk, because it counts animals with
 several diseases more than once:</p>
-<div class="sourceCode" id="cb18"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb19"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">p</span> <span class="op">&lt;-</span> <span class="va">gd_cull</span><span class="op">$</span><span class="va">diseases</span><span class="op">$</span><span class="va">prob</span></span>
 <span><span class="va">h</span> <span class="op">&lt;-</span> <span class="va">gd</span><span class="op">$</span><span class="va">adjusted</span><span class="op">$</span><span class="va">adjusted</span></span>
 <span><span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span>excess_risk_sum <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/sum.html" class="external-link">sum</a></span><span class="op">(</span><span class="va">p</span> <span class="op">*</span> <span class="op">(</span><span class="va">h</span> <span class="op">*</span> <span class="fl">0.2366</span> <span class="op">/</span> <span class="op">(</span><span class="va">h</span> <span class="op">*</span> <span class="fl">0.2366</span> <span class="op">+</span> <span class="fl">1</span> <span class="op">-</span> <span class="fl">0.2366</span><span class="op">)</span> <span class="op">-</span> <span class="fl">0.2366</span><span class="op">)</span><span class="op">)</span>,</span>
@@ -585,20 +611,20 @@ per kg, and a replacement price less culled-cow price of 1299.33 -
 population, so the joint distribution is reused. The yield impacts are
 percent losses, so the gap is computed as in
 <code><a href="../articles/deconflate.html">vignette("deconflate")</a></code>:</p>
-<div class="sourceCode" id="cb19"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb20"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">yres</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/deconflate.html">deconflate</a></span><span class="op">(</span><span class="fu"><a href="../reference/example_global_dairy.html">example_global_dairy</a></span><span class="op">(</span><span class="st">"yield"</span><span class="op">)</span>, n_draws <span class="op">=</span> <span class="fl">0</span>, joint <span class="op">=</span> <span class="va">j_gd</span><span class="op">)</span></span>
 <span><span class="co">#&gt; Warning: Adjusted impacts change sign for CK, CM, DA, MF. The raw impacts are</span></span>
 <span><span class="co">#&gt; smaller than the associated diseases alone would produce under the additive</span></span>
-<span><span class="co">#&gt; model; check the estimands, and whether the estimates come from populations</span></span>
-<span><span class="co">#&gt; with different comorbidity patterns.</span></span>
+<span><span class="co">#&gt; model; check the estimates, and whether they come from populations with</span></span>
+<span><span class="co">#&gt; different comorbidity patterns.</span></span>
 <span><span class="va">yield_gap</span> <span class="op">&lt;-</span> <span class="fl">5013</span> <span class="op">/</span> <span class="op">(</span><span class="fl">1</span> <span class="op">-</span> <span class="va">yres</span><span class="op">$</span><span class="va">totals</span><span class="op">$</span><span class="va">adjusted_total</span> <span class="op">/</span> <span class="fl">100</span><span class="op">)</span> <span class="op">-</span> <span class="fl">5013</span></span>
 <span><span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span>yield <span class="op">=</span> <span class="va">yield_gap</span> <span class="op">*</span> <span class="fl">0.5981</span>,</span>
 <span>  culling <span class="op">=</span> <span class="va">gd</span><span class="op">$</span><span class="va">attributable</span><span class="op">$</span><span class="va">summary</span><span class="op">$</span><span class="va">attributable</span> <span class="op">*</span> <span class="op">(</span><span class="fl">1299.33</span> <span class="op">-</span> <span class="fl">785.86</span><span class="op">)</span><span class="op">)</span></span>
 <span><span class="co">#&gt;     yield   culling </span></span>
 <span><span class="co">#&gt; 222.73500  55.78346</span></span></code></pre></div>
-<p>The warning says that, with the unknown pairs filled in by the global
-fit, the raw yield impacts of four diseases are smaller than their
-associated diseases alone would produce under the additive model.</p>
+<p>The warning says that, with the unknown pairs filled in by the fit,
+the raw yield impacts of four diseases are smaller than their associated
+diseases alone would produce under the additive model.</p>
 </div>
 <div class="section level2">
 <h2 id="methods-that-are-not-available-for-new-analyses">Methods that are not available for new analyses<a class="anchor" aria-label="anchor" href="#methods-that-are-not-available-for-new-analyses"></a>
@@ -634,7 +660,7 @@ not.</li>
 <li>The snapshot model and the attributable risk use the whole
 distribution of disease combinations, so they depend on the
 maximum-entropy assumption, on how unknown pairs are filled in, and on
-any three-way terms.</li>
+any rows about combinations or subgroups.</li>
 <li>Culling and death compete. Make sure the source estimates are of the
 same kind (cause-specific or subdistribution), and that
 <code>overall_risk</code> is the risk of the same event.</li>

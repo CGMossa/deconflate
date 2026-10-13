@@ -23,7 +23,7 @@
     <li><a class="dropdown-item" href="../articles/thresholds-and-scaling.html">Threshold searches and many diseases</a></li>
     <li><a class="dropdown-item" href="../articles/event-impacts.html">Event impacts (culling and mortality)</a></li>
     <li><a class="dropdown-item" href="../articles/reproducing-published.html">Reproducing the published analyses</a></li>
-    <li><a class="dropdown-item" href="../articles/interactions.html">Disease combinations, interactions and attribution</a></li>
+    <li><a class="dropdown-item" href="../articles/interactions.html">Disease combinations, subgroups and interactions</a></li>
     <li><a class="dropdown-item" href="../articles/uncertainty.html">Uncertainty and sensitivity</a></li>
   </ul></li>
 <li class="active nav-item"><a class="nav-link" href="../news/index.html">Changelog</a></li>
@@ -44,17 +44,47 @@
 
     <div class="section level2">
 <h2 class="pkg-version" data-toc-text="development version" id="deconflate-development-version">deconflate (development version)<a class="anchor" aria-label="anchor" href="#deconflate-development-version"></a></h2>
-<p>Version 0.4 is being built in steps (see <code>ROADMAP.md</code>). So far: the interface is slimmed to de-conflation itself, and everything runs through one function, <code><a href="../reference/deconflate.html">deconflate()</a></code>, with one impact table per call.</p>
+<p>Version 0.4 is being built in steps (see <code>ROADMAP.md</code>). So far: the interface is slimmed to de-conflation itself; everything runs through one function, <code><a href="../reference/deconflate.html">deconflate()</a></code>, with one impact table per call; and there is one model and one input layout, in which a row can be about a combination of diseases or a subgroup, crude or adjusted, and several rows can describe the same thing.</p>
 <div class="section level3">
-<h3 id="breaking-changes-development-version">Breaking changes<a class="anchor" aria-label="anchor" href="#breaking-changes-development-version"></a></h3>
+<h3 id="breaking-changes-one-model-one-input-layout-development-version">Breaking changes: one model, one input layout<a class="anchor" aria-label="anchor" href="#breaking-changes-one-model-one-input-layout-development-version"></a></h3>
+<ul><li>
+<strong>One model.</strong> The <code>method</code> argument is removed from <code><a href="../reference/deconflate.html">deconflate()</a></code>, <code><a href="../reference/cm_threshold.html">cm_threshold()</a></code> and the screens (an error says so). <code><a href="../reference/deconflate.html">deconflate()</a></code> always gives the answer of the maximum-entropy model that matches every association row and reproduces every impact row. When the pairwise 2x2 tables give the same answer (every association row a crude pair row, every pair covered, one-disease impact rows, additive impacts), they are used directly; up to 20 diseases the joint distribution is still fitted once, to check that the rows can hold together. <code>$diagnostics$method</code> says <code>"pairwise shortcut"</code> or <code>"full model"</code>. The <code>feasibility</code> argument is removed (use <code><a href="../reference/check_feasibility.html">check_feasibility()</a></code> for the separate checks). <code><a href="../reference/compare_methods.html">compare_methods()</a></code> sets the model (<code>"deconflate"</code>) beside the published approximation (<code>"published"</code>, and for event impacts <code>"first_order"</code>).</li>
+<li>
+<strong>One input layout.</strong> Three tables, with the same core columns:
+<ul><li>
+<code>diseases</code>: <code>disease</code>, <code>measure</code> (<code>prevalence</code>, <code>probability</code>, <code>incidence_rate</code>), <code>value</code>, and <code>label</code>, <code>time_horizon</code>, <code>reference_population</code>;</li>
+<li>
+<code>associations</code>: <code>disease</code>, <code>associated_with</code>, <code>among</code>, <code>adjusted_for</code>, <code>measure</code>, <code>value</code>, <code>study</code>;</li>
+<li>impacts: <code>disease</code>, <code>among</code>, <code>adjusted_for</code>, <code>measure</code> (event impacts only), <code>value</code>, <code>label</code>, <code>units</code>, <code>study</code>; plus <code>dist</code>, <code>p1</code>-<code>p4</code>, <code>source</code> and <code>note</code> everywhere. <code>disease</code> and <code>associated_with</code> take a disease or a combination (<code>"MAS;SCK"</code>); <code>among</code> takes a subgroup (<code>"SCK"</code>, <code>"no SCK"</code>, <code>"no others"</code>). <code><a href="../reference/cm_diseases.html">cm_diseases()</a></code>, <code><a href="../reference/cm_associations.html">cm_associations()</a></code> and <code><a href="../reference/cm_impacts.html">cm_impacts()</a></code> take the same arguments. Old columns and arguments (<code>id</code>, <code>type</code>, <code>disease1</code>, <code>disease2</code>, <code>estimand</code>, <code>adjusted</code>, <code>adjusted_associations</code>) give a message saying what to write instead.</li>
+</ul></li>
+<li>
+<strong>Association measures:</strong> <code>OR</code>, <code>RR</code>, <code>RD</code>, <code>phi</code>, <code>prevalence</code> (replaces <code>cond_prob</code>) and <code>OR_ratio</code> (the odds ratio among a subgroup divided by that among its complement; replaces three-way terms). A row about a combination compares animals with all of its diseases against animals with none of them. The three-way and interactions tables, <code>cm_three_way()</code> and <code>cm_interactions()</code> are removed (<code><a href="../reference/set_three_way.html">set_three_way()</a></code> and <code><a href="../reference/set_interaction.html">set_interaction()</a></code> now add rows); old files are recognised and reported.</li>
+<li>
+<strong>Estimands are decided by <code>adjusted_for</code>.</strong> An impact or association row is crude when <code>adjusted_for</code> is empty, and adjusted for the diseases it names otherwise (<code>"all"</code>: every other disease and term). <code>estimand</code> is removed. Adjusted associations are odds ratios between two diseases, matched as logistic-regression coefficients; ids that are not diseases of the model (parity, herd) are noted, and a row adjusted only for them is used as crude.</li>
+<li>
+<strong>Distribution keys</strong> are <code>prob:&lt;disease&gt;</code>, <code>associations:&lt;row&gt;</code> and <code>impacts:&lt;row&gt;</code>; <code>assoc:&lt;d1&gt;:&lt;d2&gt;</code>, <code>impact:&lt;disease&gt;</code>, <code>inter:&lt;d1&gt;:&lt;d2&gt;</code> and <code>three:&lt;d1&gt;:&lt;d2&gt;:&lt;d3&gt;</code> still work when they name one row. <code><a href="../reference/sensitivity_oat.html">sensitivity_oat()</a></code> reports inputs by these keys.</li>
+<li>
+<strong>Results:</strong> <code>$adjusted</code> has one row per term (diseases, then interactions) with <code>kind</code>, <code>raw</code> (when the term has one row) and <code>rows</code>; <code>$conflation$A</code> has one row per impact row; <code>raw_sum</code> is <code>NA</code> when a disease has several rows. New: <code>$estimates</code> (every row with its fitted value and standardised residual), <code>$heterogeneity</code> and <code>$pooling</code>.</li>
+</ul></div>
+<div class="section level3">
+<h3 id="new-features-combinations-subgroups-and-several-rows-per-item-development-version">New features: combinations, subgroups and several rows per item<a class="anchor" aria-label="anchor" href="#new-features-combinations-subgroups-and-several-rows-per-item-development-version"></a></h3>
+<ul><li>
+<strong>Rows about combinations and subgroups.</strong> Association rows can relate combinations, hold within subgroups and be adjusted for other diseases; the joint distribution matches them all (raking on events). Impact rows about a combination add an interaction (additive, or on the log-hazard scale for event impacts); rows within subgroups and adjusted rows also identify interactions. <code><a href="../reference/deconflate.html">deconflate()</a></code> checks that the rows determine every term and names those they do not. Contributions split each interaction equally among its diseases.</li>
+<li>
+<strong>Several rows per item.</strong> Association rows about the same quantity are pooled on the log scale, by random effects (DerSimonian-Laird; default) or fixed effect (<code>pool = "fixed"</code>), with Q, I^2 and tau^2 in <code>$heterogeneity</code>; draws keep the central weights and add the between-study spread. Impact rows that over-determine the impacts are fitted by weighted least squares (weights 1/SD^2; rows without a distribution are exact).</li>
+<li>
+<code><a href="../reference/simulate_raw_impacts.html">simulate_raw_impacts()</a></code> simulates rows of any kind (<code>rows</code>), with interactions named by combination (<code>c("LAM;MAS" = 2)</code>).</li>
+<li>The five-disease example has two studies of one odds ratio, an <code>OR_ratio</code> row, several rows for one disease, a subgroup row and interaction rows (additive and event). Reference values: <code>inst/validation/reference_v041.py</code> (independent Python implementation).</li>
+</ul></div>
+<div class="section level3">
+<h3 id="breaking-changes-one-function-one-impact-table-development-version">Breaking changes: one function, one impact table<a class="anchor" aria-label="anchor" href="#breaking-changes-one-function-one-impact-table-development-version"></a></h3>
 <ul><li>
 <strong>One function, one impact table.</strong> <code><a href="../reference/deconflate.html">deconflate()</a></code> adjusts one table of impact estimates; for several outcomes, call it once per table. <code>cm_analyses()</code> and the multi-analysis results are removed.</li>
 <li>
-<strong>Named input tables with any file name.</strong> <code><a href="../reference/cm_read_inputs.html">cm_read_inputs()</a></code> and <code><a href="../reference/cm_check_inputs.html">cm_check_inputs()</a></code> take each table as its own argument (<code>diseases</code>, <code>associations</code>, <code>impacts</code>, and optionally <code>interactions</code> and <code>three_way</code>), as a path to a CSV file with any name or a data frame. The <code>dir</code> argument and the fixed file names are removed. <code><a href="../reference/deconflate.html">deconflate()</a></code> needs at least one association; the sensitivity tools also run without any. <code><a href="../reference/cm_template.html">cm_template()</a></code> writes one example of each table (<code>type</code> is removed).</li>
+<strong>Named input tables with any file name.</strong> <code><a href="../reference/cm_read_inputs.html">cm_read_inputs()</a></code> and <code><a href="../reference/cm_check_inputs.html">cm_check_inputs()</a></code> take each table as its own argument (<code>diseases</code>, <code>associations</code>, <code>impacts</code>), as a path to a CSV file with any name or a data frame. The <code>dir</code> argument and the fixed file names are removed. <code><a href="../reference/deconflate.html">deconflate()</a></code> needs at least one association; the sensitivity tools also run without any. <code><a href="../reference/cm_template.html">cm_template()</a></code> writes one example of each table (<code>type</code> is removed).</li>
 <li>
-<strong>Pairs without an association are unknown by default.</strong> The global model fills them in from the other associations, and the result lists them with the odds ratios the fit gave them (<code>$unknown_pairs</code>). An odds ratio of 1 states that two diseases are unrelated. The argument <code>missing_associations</code> and the association measures <code>"independent"</code>, <code>"unknown"</code> and <code>"table"</code> (with <code>n11</code>-<code>n00</code>) are removed; old tables get a message saying what to write instead. The published analyses treated unlisted pairs as independent; the <code>reproduce_*()</code> functions still do.</li>
-<li>
-<strong><code>method = "auto"</code> is the default.</strong> It uses the simultaneous method when every pair has an association and there are no interactions or three-way terms (where the two methods give the same answer), and the global method otherwise, with a note giving the reason. <code>method = "simultaneous"</code> switches in the same way; <code>"global"</code> always uses the global method. With more than 20 diseases the sampled backend of <code><a href="../reference/fit_joint.html">fit_joint()</a></code> is used automatically.</li>
+<strong>Pairs without an association are unknown by default.</strong> The model fills them in from the other associations, and the result lists them with the odds ratios the fit gave them (<code>$unknown_pairs</code>). An odds ratio of 1 states that two diseases are unrelated. The argument <code>missing_associations</code> and the association measures <code>"independent"</code>, <code>"unknown"</code> and <code>"table"</code> (with <code>n11</code>-<code>n00</code>) are removed; old tables get a message saying what to write instead. The published analyses treated unlisted pairs as independent; the <code>reproduce_*()</code> functions still do.</li>
+<li>With more than 20 diseases the sampled backend of <code><a href="../reference/fit_joint.html">fit_joint()</a></code> is used automatically (for crude pair rows).</li>
 <li>
 <strong>Event impacts run through <code><a href="../reference/deconflate.html">deconflate()</a></code>.</strong> With <code>event_model = TRUE</code> and <code>overall_risk</code> (a proportion or a distribution), the impact table has a <code>measure</code> column: hazard ratios, rate ratios, risk ratios, odds ratios and risk differences, which can be mixed, all adjusted with the snapshot hazard model. The result has the adjusted hazard ratios and the risk attributable to disease, with its Shapley allocation. <code>deconflate_hr()</code>, <code>cm_hr_model()</code>, <code>cm_hazard_ratios()</code>, <code>attributable_risk()</code> and <code>example_global_dairy_hr()</code> are removed; <code>example_global_dairy("culling")</code> and <code>example_uk_dairy_2022("culling")</code> give the event impacts. In the example folders, <code>hazard_ratios.csv</code> is replaced by <code>culling.csv</code>.</li>
 <li>
@@ -66,7 +96,7 @@
 <li>
 <strong>Examples return one model.</strong> <code>example_global_dairy(outcome, inputs)</code> and <code>example_uk_dairy_2022(outcome)</code> return the model of one outcome (<code>"yield"</code>, <code>"fertility"</code> or <code>"culling"</code>).</li>
 <li>
-<strong>Sensitivity tools</strong> (<code><a href="../reference/screen_associations.html">screen_associations()</a></code>, <code><a href="../reference/screen_interactions.html">screen_interactions()</a></code>, <code><a href="../reference/screen_three_way.html">screen_three_way()</a></code>, <code><a href="../reference/sensitivity_oat.html">sensitivity_oat()</a></code>, <code><a href="../reference/cm_threshold.html">cm_threshold()</a></code>) use <code>method = "auto"</code>, support event impacts (<code>event_model = TRUE</code>, <code>overall_risk</code>), and run on point estimates. <code><a href="../reference/cm_threshold.html">cm_threshold()</a></code> reports the methods it used and accepts the input <code>"risk"</code>.</li>
+<strong>Sensitivity tools</strong> (<code><a href="../reference/screen_associations.html">screen_associations()</a></code>, <code><a href="../reference/screen_interactions.html">screen_interactions()</a></code>, <code><a href="../reference/screen_three_way.html">screen_three_way()</a></code>, <code><a href="../reference/sensitivity_oat.html">sensitivity_oat()</a></code>, <code><a href="../reference/cm_threshold.html">cm_threshold()</a></code>) adjust each scenario as <code><a href="../reference/deconflate.html">deconflate()</a></code> does, support event impacts (<code>event_model = TRUE</code>, <code>overall_risk</code>), and run on point estimates. <code><a href="../reference/cm_threshold.html">cm_threshold()</a></code> reports the methods it used and accepts the input <code>"risk"</code>.</li>
 </ul></div>
 <div class="section level3">
 <h3 id="documentation-development-version">Documentation<a class="anchor" aria-label="anchor" href="#documentation-development-version"></a></h3>
@@ -158,7 +188,7 @@
 <li>
 <code><a href="../reference/compare_methods.html">compare_methods()</a></code> works on models, analyses, hazard-ratio models and Monte Carlo runs. Methods that cannot be run, and valuations that cannot be evaluated for a method, are listed in <code>failed</code> with the reason.</li>
 <li>
-<strong>Three-way scenarios:</strong> <code><a href="../reference/cm_three_way.html">cm_three_way()</a></code> sets the ratio of conditional odds ratios for a triple (a log-linear three-way term in the global fit, with all pairwise tables still matched); <code><a href="../reference/set_three_way.html">set_three_way()</a></code> and <code><a href="../reference/screen_three_way.html">screen_three_way()</a></code>.</li>
+<strong>Three-way scenarios:</strong> <code>cm_three_way()</code> sets the ratio of conditional odds ratios for a triple (a log-linear three-way term in the global fit, with all pairwise tables still matched); <code><a href="../reference/set_three_way.html">set_three_way()</a></code> and <code><a href="../reference/screen_three_way.html">screen_three_way()</a></code>.</li>
 <li>
 <strong>Batch Monte Carlo:</strong> <code>cm_batch_sampler()</code> runs several analyses on shared draws of the disease probabilities and associations.</li>
 <li>
@@ -219,23 +249,24 @@
 <li>The reproduction vignette now has a comparison with Table 9 of Rasmussen et al. (2022), notes on the yield and fertility-allocation differences and on the corrigendum (which changes Table 7 only), and an updated 2024 section with long-run Monte Carlo means for yield and culling.</li>
 <li>Added <code>inst/validation/reference_2024_analysis.py</code>.</li>
 </ul></div>
-<div class="section level3">
-<h3 id="id_0009001-0-1-0">0.0.0.9001<a class="anchor" aria-label="anchor" href="#id_0009001-0-1-0"></a></h3>
+</div>
+    <div class="section level2">
+<h2 class="pkg-version" data-toc-text="0.0.0.9001" id="deconflate-0009001">deconflate 0.0.0.9001<a class="anchor" aria-label="anchor" href="#deconflate-0009001"></a></h2>
 <p>Builds the remaining v0.1 features.</p>
-<div class="section level4">
-<h4 id="reproduction-of-the-published-analyses-0-1-0">Reproduction of the published analyses<a class="anchor" aria-label="anchor" href="#reproduction-of-the-published-analyses-0-1-0"></a></h4>
+<div class="section level3">
+<h3 id="reproduction-of-the-published-analyses-0-0-0-9001">Reproduction of the published analyses<a class="anchor" aria-label="anchor" href="#reproduction-of-the-published-analyses-0-0-0-9001"></a></h3>
 <ul><li>Added the UK dairy model of Rasmussen et al. (2022): <code><a href="../reference/example_uk_dairy_2022.html">example_uk_dairy_2022()</a></code> and <code>uk_dairy_2022_economics()</code>. It reproduces the fertility and culling results of Tables 8-10 and documents why the yield results differ (the printed Table 4 differs from the inputs implied by Tables 8-10).</li>
 <li>Added <code>sampler_global_dairy()</code> with the input distributions of Rasmussen et al. (2024). Monte Carlo means of the adjusted yield impacts reproduce Table 5. The central value of the PERT distributions in Tables 2-4 is the mode.</li>
 </ul></div>
-<div class="section level4">
-<h4 id="culling-and-valuation-0-1-0">Culling and valuation<a class="anchor" aria-label="anchor" href="#culling-and-valuation-0-1-0"></a></h4>
+<div class="section level3">
+<h3 id="culling-and-valuation-0-0-0-9001">Culling and valuation<a class="anchor" aria-label="anchor" href="#culling-and-valuation-0-0-0-9001"></a></h3>
 <ul><li>Added <code>hr_conversion()</code>, <code>as_impacts()</code> and <code>adjusted_hr()</code>, which take culling hazard ratios through to adjusted hazard ratios. They support proportional-hazards and published (odds-ratio) conversions.</li>
 <li>
 <code>productivity_gap()</code> now supports impacts on the absolute scale.</li>
 <li>Added <code>value_losses()</code> to value gaps in money, and <code>combine_impacts()</code> to stack impact tables.</li>
 </ul></div>
-<div class="section level4">
-<h4 id="uncertainty-0-1-0">Uncertainty<a class="anchor" aria-label="anchor" href="#uncertainty-0-1-0"></a></h4>
+<div class="section level3">
+<h3 id="uncertainty-0-0-0-9001">Uncertainty<a class="anchor" aria-label="anchor" href="#uncertainty-0-0-0-9001"></a></h3>
 <ul><li>Added input distributions: <code><a href="../reference/distributions.html">dist_fixed()</a></code>, <code><a href="../reference/distributions.html">dist_normal()</a></code> (optionally truncated), <code><a href="../reference/distributions.html">dist_lognormal()</a></code>, <code><a href="../reference/distributions.html">dist_lognormal_ci()</a></code>, <code><a href="../reference/distributions.html">dist_beta()</a></code>, <code><a href="../reference/distributions.html">dist_pert()</a></code>, <code><a href="../reference/distributions.html">dist_pert_mean()</a></code>, <code><a href="../reference/distributions.html">dist_uniform()</a></code> and <code><a href="../reference/distributions.html">dist_mixture()</a></code>.</li>
 <li>Added <code>cm_sampler()</code>, which draws inputs on their entry scale. It supports optional correlation of impacts across outcomes (Gaussian copula).</li>
 <li>
@@ -247,29 +278,28 @@
 <li>Added <code>cm_scenario()</code> for scenario reweighting from distributions. <code>summary.cm_mc()</code> gains <code>what = "loss"</code>, <code>"total"</code> and <code>"rejections"</code>, and reports Monte Carlo standard errors.</li>
 <li>Parameter keys are now <code>prob:&lt;id&gt;</code>, <code>assoc:&lt;d1&gt;:&lt;d2&gt;</code>, <code>impact:&lt;outcome&gt;:&lt;disease&gt;</code> and <code>inter:&lt;outcome&gt;:&lt;d1&gt;:&lt;d2&gt;</code>.</li>
 </ul></div>
-<div class="section level4">
-<h4 id="feasibility-attribution-and-sensitivity-0-1-0">Feasibility, attribution and sensitivity<a class="anchor" aria-label="anchor" href="#feasibility-attribution-and-sensitivity-0-1-0"></a></h4>
+<div class="section level3">
+<h3 id="feasibility-attribution-and-sensitivity-0-0-0-9001">Feasibility, attribution and sensitivity<a class="anchor" aria-label="anchor" href="#feasibility-attribution-and-sensitivity-0-0-0-9001"></a></h3>
 <ul><li>Added <code><a href="../reference/check_feasibility.html">check_feasibility()</a></code>. It runs a triple screen without extra packages and an exact linear-programming check when <code>lpSolve</code> is installed.</li>
 <li>Added <code><a href="../reference/shapley_by_cell.html">shapley_by_cell()</a></code> with <code><a href="../reference/loss_functions.html">loss_additive()</a></code> and <code><a href="../reference/loss_functions.html">loss_multiplicative()</a></code>, for Shapley attribution of general loss functions.</li>
 <li>Added sensitivity tools: <code><a href="../reference/screen_associations.html">screen_associations()</a></code>, <code><a href="../reference/screen_interactions.html">screen_interactions()</a></code>, <code><a href="../reference/sensitivity_oat.html">sensitivity_oat()</a></code> and <code>compare_scenarios()</code>. Also added <code><a href="../reference/set_association.html">set_association()</a></code> and <code><a href="../reference/set_interaction.html">set_interaction()</a></code> for editing models.</li>
 </ul></div>
-<div class="section level4">
-<h4 id="reporting-0-1-0">Reporting<a class="anchor" aria-label="anchor" href="#reporting-0-1-0"></a></h4>
+<div class="section level3">
+<h3 id="reporting-0-0-0-9001">Reporting<a class="anchor" aria-label="anchor" href="#reporting-0-0-0-9001"></a></h3>
 <ul><li>Added <code><a href="../reference/contribution_table.html">contribution_table()</a></code>, <code><a href="https://rdrr.io/r/base/summary.html" class="external-link">summary()</a></code> for adjustment results, and base-graphics plots: <code><a href="https://rdrr.io/r/graphics/plot.default.html" class="external-link">plot()</a></code> for results, Monte Carlo runs, screens and one-at-a-time sensitivity, plus <code><a href="../reference/plots.html">plot_burden()</a></code>.</li>
 <li>Added four vignettes and a pkgdown configuration.</li>
 </ul></div>
-<div class="section level4">
-<h4 id="other-changes-0-1-0">Other changes<a class="anchor" aria-label="anchor" href="#other-changes-0-1-0"></a></h4>
+<div class="section level3">
+<h3 id="other-changes-0-0-0-9001">Other changes<a class="anchor" aria-label="anchor" href="#other-changes-0-0-0-9001"></a></h3>
 <ul><li>
 <code><a href="../reference/pair_tables.html">pair_tables()</a></code> is vectorised, which makes Monte Carlo runs faster.</li>
 <li>Hazard ratios of exactly 1 now give exactly zero excess risk.</li>
 </ul></div>
 </div>
-<div class="section level3">
-<h3 id="id_0009000-0-1-0">0.0.0.9000<a class="anchor" aria-label="anchor" href="#id_0009000-0-1-0"></a></h3>
+    <div class="section level2">
+<h2 class="pkg-version" data-toc-text="0.0.0.9000" id="deconflate-0009000">deconflate 0.0.0.9000<a class="anchor" aria-label="anchor" href="#deconflate-0009000"></a></h2>
 <ul><li>Initial skeleton: input constructors, the three adjustment methods, the joint distribution, productivity gaps, Shapley attribution for pairwise interactions, hazard-ratio conversion and Monte Carlo with reweighting.</li>
 </ul></div>
-</div>
   </main><aside class="col-md-3"><nav id="toc" aria-label="Table of contents"><h2>On this page</h2>
     </nav></aside></div>
 

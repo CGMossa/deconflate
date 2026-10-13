@@ -133,7 +133,9 @@ call per impact table; event impacts; draws inside
 no valuation section; the published method only in
 [`compare_methods()`](https://rasmussenphilip.github.io/deconflate/reference/compare_methods.md)).
 
-Update `run_all_features.R` again after items 4-6.
+Update `run_all_features.R` for item 4.
+
+Update `run_all_features.R` again after items 5-6.
 
 **Slim the interface to de-conflation itself.**
 
@@ -245,23 +247,70 @@ the screens and
 model per outcome), the vignettes and `run_all_features.R` updated to
 the new interface.
 
-**Several estimates per disease and per pair**, each with its own
-estimand, `adjusted_for` and uncertainty.
+**One model, one input layout, and several estimates per disease,
+combination and pair.** Prototype:
+`inst/validation/prototype_v04_item4.py`; reference values:
+`inst/validation/reference_v041.py` (independent implementation),
+checked in `test-import.R`, `test-event.R` and `test-item4.R`.
 
-Impact tables: several rows per disease (optional `study` label), fitted
-by weighted least squares with weights 1/SD²; a row without uncertainty
-is exact. Error only when exact rows contradict each other and the
-anchor does not let the associations reconcile them. For event impacts,
-several rows per disease on the snapshot model (all measures already
-supported, one row per disease, in item 3).
+One model for the user: the `method` argument goes from
+[`deconflate()`](https://rasmussenphilip.github.io/deconflate/reference/deconflate.md)
+and the sensitivity functions. The package always gives the global
+model’s answer, uses the pairwise shortcut internally when it gives the
+same answer (recorded in the result), and fits the full joint
+distribution once for the central estimate (up to about 20 diseases) to
+confirm the inputs are jointly possible.
+[`compare_methods()`](https://rasmussenphilip.github.io/deconflate/reference/compare_methods.md)
+keeps the published approximation beside the package’s result.
 
-Association tables: several rows per pair, mapped to the marginal log
-odds ratio and pooled (random effects by default, `pool = "fixed"` as an
-option; Q, I² and tau² reported). Associations adjusted for diseases in
-the model (ids or `all`) are exact conditional associations (logistic
-projection, via a fixed-point mapping to the marginal scale);
-associations adjusted for other covariates are used as marginal, with a
-note.
+Input layout (the same core columns in every file): `diseases.csv` with
+`disease`, `measure` (`prevalence`, `probability`, `incidence_rate`),
+`value`; `associations.csv` with `disease`, `associated_with`, `among`,
+`adjusted_for`, `measure`, `value`; impact files with `disease`,
+`among`, `adjusted_for`, `measure` (event impacts only), `value`,
+`label`, `units`. `disease` and `associated_with` take a disease or a
+combination (`MAS;SCK`); `among` takes a subgroup (`SCK`, `no SCK`,
+`SCK;no MET`). Plus `study`, `dist`, `p1`-`p4`, `source`, `note`. A row
+about two or more diseases belongs in the associations file; the
+diseases file holds whole-population prevalences only.
+
+Association measures: `OR`, `RR`, `RD`, `phi`, `prevalence` (of
+`disease` in animals with `associated_with`, or of a combination) and
+`OR_ratio` (the odds ratio among `among` divided by that among its
+complement). `cond_prob`, `estimand` (decided by `adjusted_for`), the
+three-way file and the interactions file go; old layouts get messages.
+Every association row is turned into the probability of one event of
+disease combinations, and the joint distribution is the maximum-entropy
+one with all of them (raking on events, with a fixed point for
+conversions that need other probabilities); for pairs only this is the
+current fit. Rows that cannot all hold are reported.
+
+Impacts of combinations and subgroups: crude or adjusted rows for a
+combination (`SCK;SCM`) or within a subgroup (`among`). Each disease’s
+own impact and an interaction for each combination listed as a `disease`
+are estimated; a combination adjusted for `all` is its interaction.
+Identification check (rows vs unknowns, and which unknowns are not
+identified). Shapley contributions split each interaction equally among
+its diseases.
+
+Event impacts: combinations as interaction terms on the log-hazard
+scale, estimated from combination rows (crude, stratified).
+
+Sensitivity tools: kept working on the new layout with as few changes as
+possible (no new features); their redesign is under “To discuss”.
+
+Several rows per item: impacts fitted by weighted least squares (weights
+1/SD²; a row without uncertainty is exact; residuals and heterogeneity
+reported); several association rows about the same quantity pooled on
+the log scale (random effects by default, `pool = "fixed"`; Q, I² and
+tau²); associations adjusted for diseases in the model are exact
+conditional associations, those adjusted for other factors are used as
+crude, with a note.
+
+Tests, vignettes
+([`vignette("interactions")`](https://rasmussenphilip.github.io/deconflate/articles/interactions.md)
+rewritten around combination and subgroup rows), the five-disease
+example and `run_all_features.R` updated.
 
 **The `anchor` argument and constraints.**
 
@@ -365,6 +414,12 @@ submission and a short software paper.
 
 ## To discuss
 
+- A redesign of the sensitivity tools
+  ([`cm_threshold()`](https://rasmussenphilip.github.io/deconflate/reference/cm_threshold.md),
+  [`sensitivity_oat()`](https://rasmussenphilip.github.io/deconflate/reference/sensitivity_oat.md)
+  and the screens) after item 4: what they should answer, how they name
+  the input they vary (e.g. by file and row), and how they handle
+  combination rows, subgroup rows and several rows per item.
 - Pairwise-only bounds as a complementary sensitivity output for large
   systems; pseudo-likelihood fitting when individual-level disease
   records are available.

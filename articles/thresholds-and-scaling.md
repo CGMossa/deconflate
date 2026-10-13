@@ -8,7 +8,7 @@ library(deconflate)
 This vignette covers two extensions: threshold searches and screens,
 which show how much the conclusions depend on single inputs (including
 inputs that have not been estimated), and the sampled backend of the
-global model, for more diseases than can be enumerated.
+model, for more diseases than can be enumerated.
 
 ## Threshold searches
 
@@ -37,23 +37,27 @@ attributable to disease and the contributions are its Shapley allocation
 
 The input is keyed as in the `distributions` of
 [`cm_model()`](https://rasmussenphilip.github.io/deconflate/reference/cm_model.md):
-`"assoc:<d1>:<d2>"`, `"inter:<d1>:<d2>"`, `"prob:<disease>"`,
-`"impact:<disease>"`, `"three:<d1>:<d2>:<d3>"` for a three-way ratio, or
-`"risk"` for the overall risk of event impacts. A pair without an
-association (unknown) is varied as an odds ratio.
+any row by its number, `"associations:<row>"` or `"impacts:<row>"`, or a
+disease’s probability, `"prob:<disease>"`. Shorter keys name the usual
+rows: `"assoc:<d1>:<d2>"` (the pair’s crude row; a pair without one,
+unknown, is varied as an odds ratio), `"impact:<disease>"` (the
+disease’s row, when it has one), `"inter:<d1>:<d2>"` (an interaction, as
+set by
+[`set_interaction()`](https://rasmussenphilip.github.io/deconflate/reference/set_interaction.md))
+and `"three:<d1>:<d2>:<d3>"` (an `OR_ratio` row, as set by
+[`set_three_way()`](https://rasmussenphilip.github.io/deconflate/reference/set_three_way.md)).
+For event impacts, `"risk"` is the overall risk.
 
 Each point is adjusted as
 [`deconflate()`](https://rasmussenphilip.github.io/deconflate/reference/deconflate.md)
-would adjust it, with point estimates. With `method = "auto"` (the
-default), the method is chosen for the point’s own inputs: the
-simultaneous method when every pair has an association and there are no
-interactions or three-way terms, the global method otherwise. When the
-input is an impact, an interaction or the overall risk (which do not
-change the joint distribution) and the adjustment uses the joint
-distribution, it is fitted once and reused, or a `joint` from
+would adjust it, with point estimates. When the input is an impact row,
+an interaction or the overall risk (which do not change the joint
+distribution) and the adjustment uses the joint distribution, it is
+fitted once and reused, or a `joint` from
 [`fit_joint()`](https://rasmussenphilip.github.io/deconflate/reference/fit_joint.md)
 can be passed; other inputs change the joint distribution, so it is
-refitted at every point.
+refitted at every point. `$method` says whether the points used the
+pairwise tables directly or the full model.
 
 ### How the search works
 
@@ -97,7 +101,7 @@ deconflate(m, n_draws = 0)$totals
 #> 1     2.5       2.109229                 0
 th <- cm_threshold(m, "assoc:d1:d3", c(1, 50), conclusion = "change", target = -0.1)
 th
-#> <cm_threshold> change over assoc:d1:d3 in [1, 50] (baseline 1; method simultaneous)
+#> <cm_threshold> change over assoc:d1:d3 in [1, 50] (baseline 1; method pairwise shortcut)
 #> Fixed: all inputs other than assoc:d1:d3 at the model's values.
 #> 
 #> Crossings:
@@ -114,15 +118,15 @@ final bracket are returned:
 ``` r
 
 th$details[[1]]$below
-#>   disease raw   adjusted      change estimand adjusted_for
-#> 1      d1 2.5 -0.2776063 -1.11104251    crude         <NA>
-#> 2      d2 5.0  3.5618863 -0.28762274    crude         <NA>
-#> 3      d3 7.5  6.9589184 -0.07214422    crude         <NA>
+#>   disease    kind raw   adjusted      change rows
+#> 1      d1 disease 2.5 -0.2776063 -1.11104251    1
+#> 2      d2 disease 5.0  3.5618863 -0.28762274    1
+#> 3      d3 disease 7.5  6.9589184 -0.07214422    1
 th$details[[1]]$above
-#>   disease raw   adjusted      change estimand adjusted_for
-#> 1      d1 2.5 -0.2776063 -1.11104252    crude         <NA>
-#> 2      d2 5.0  3.5618863 -0.28762274    crude         <NA>
-#> 3      d3 7.5  6.9589184 -0.07214422    crude         <NA>
+#>   disease    kind raw   adjusted      change rows
+#> 1      d1 disease 2.5 -0.2776063 -1.11104252    1
+#> 2      d2 disease 5.0  3.5618863 -0.28762274    1
+#> 3      d3 disease 7.5  6.9589184 -0.07214422    1
 ```
 
 The search works in either direction. The odds ratio of d2 and d3 is 3
@@ -139,11 +143,11 @@ cm_threshold(m, "assoc:d2:d3", c(0.2, 20), conclusion = "change", target = 0.1)$
 #> 1 -4.971832e-10 the aggregate falls below the baseline + 10%
 ```
 
-For a pair without an association, the baseline is the global method,
-which fills the pair in from the maximum-entropy fit; the change is
-relative to that fit. Here the pair d1:d3 is left out. The fitted
-distribution gives it an odds ratio of about 1.14, and an odds ratio of
-about 6.4 would reduce the aggregate by 10%:
+For a pair without an association, the baseline fills the pair in from
+the maximum-entropy fit; the change is relative to that fit. Here the
+pair d1:d3 is left out. The fitted distribution gives it an odds ratio
+of about 1.14, and an odds ratio of about 6.4 would reduce the aggregate
+by 10%:
 
 ``` r
 
@@ -163,8 +167,7 @@ th_unk$thresholds[, c("item", "status", "threshold", "description")]
 
 The baseline value of an unknown input is `NA` (`th_unk$baseline`). At
 the grid points the pair has a value, so every pair has an association
-and the simultaneous method is used there; it gives the same answer as
-the global method would.
+and the pairwise tables are used directly there.
 
 ### Rankings
 
@@ -177,7 +180,7 @@ over the whole range:
 
 th_rank <- cm_threshold(m, "assoc:d2:d3", c(0.1, 100), conclusion = "rank", n_grid = 201)
 th_rank
-#> <cm_threshold> rank over assoc:d2:d3 in [0.1, 100] (baseline 3; method simultaneous)
+#> <cm_threshold> rank over assoc:d2:d3 in [0.1, 100] (baseline 3; method pairwise shortcut)
 #> Fixed: all inputs other than assoc:d2:d3 at the model's values.
 #> 
 #> Crossings:
@@ -219,11 +222,11 @@ th_sign$thresholds[, c("item", "status", "threshold", "description")]
 
 Below that value, the raw impact of d1 is smaller than its associated
 diseases alone would produce under the additive model. This says that
-the inputs are inconsistent with the model there (or the estimands are
-not what they were assumed to be), not that d1 is protective.
+the inputs are inconsistent with the model there (or the rows do not
+mean what they were taken to mean), not that d1 is protective.
 
 [`cm_threshold()`](https://rasmussenphilip.github.io/deconflate/reference/cm_threshold.md)
-searches with the methods of
+searches with the model of
 [`deconflate()`](https://rasmussenphilip.github.io/deconflate/reference/deconflate.md).
 The published approximation, `m^2 / (m + c)`, kept for comparison only,
 behaves differently: it has a pole where its denominator is zero, and
@@ -235,7 +238,12 @@ of about -0.527:
 ``` r
 
 A <- deconflate(m, n_draws = 0)$conflation$A
--sum(A["d1", c("d2", "d3")] * c(5, 7.5))
+A                                    # one row per impact row
+#>                   d1        d2        d3
+#> impacts:1 1.00000000 0.1053266 0.0000000
+#> impacts:2 0.07434818 1.0000000 0.2096236
+#> impacts:3 0.00000000 0.1670438 1.0000000
+-sum(A["impacts:1", c("d2", "d3")] * c(5, 7.5))
 #> [1] -0.5266329
 ```
 
@@ -246,16 +254,30 @@ shows this on either side of the pole:
 
 sapply(c(-0.60, -0.45), function(v) {
   mv <- cm_model(m, cm_impacts(c("d1", "d2", "d3"), c(v, 5, 7.5)))
-  unlist(compare_methods(mv, methods = c("published", "simultaneous"))$impacts[1, -1])
+  unlist(compare_methods(mv)$impacts[1, -1])
 })
-#>                    [,1]       [,2]
-#> raw          -0.6000000 -0.4500000
-#> published    -4.9068328  2.6424676
-#> simultaneous -0.9821118 -0.8308846
+#>                  [,1]       [,2]
+#> raw        -0.6000000 -0.4500000
+#> published  -4.9068328  2.6424676
+#> deconflate -0.9821118 -0.8308846
 ```
 
-A search across such a pole reports a `"discontinuity"`, not a
-threshold.
+The model itself has poles only where the impact rows stop telling the
+terms apart. For example, crude rows for a, for b and for the
+combination a;b (all against none) do not determine the two impacts and
+the interaction when P(a) + P(b) = 1, whatever the association. A search
+across such a pole reports a `"discontinuity"`, not a threshold, and a
+grid point on it is `"singular"`:
+
+``` r
+
+pole <- cm_model(cm_population(cm_diseases(c("a", "b"), c(0.3, 0.5)), cm_associations("a", "b", 2)),
+                 cm_impacts(c("a", "b", "a;b"), c(1, 2, 4)))
+th_pole <- cm_threshold(pole, "prob:a", c(0.3, 0.7), conclusion = "sign", diseases = "a", n_grid = 10)
+th_pole$thresholds[, c("item", "status", "lower", "upper", "below", "above")]
+#>   item        status     lower     upper     below    above
+#> 1    a discontinuity 0.4777778 0.5222222 -45.84103 45.75542
+```
 
 ### A target in the units of the impacts
 
@@ -280,7 +302,7 @@ not swap where the range could be evaluated:
 
 th_prob <- cm_threshold(m, "prob:d1", c(0.05, 1.5), conclusion = "rank")
 th_prob
-#> <cm_threshold> rank over prob:d1 in [0.05, 1.5] (baseline 0.1; method simultaneous)
+#> <cm_threshold> rank over prob:d1 in [0.05, 1.5] (baseline 0.1; method pairwise shortcut)
 #> Fixed: all inputs other than prob:d1 at the model's values.
 #> 35 of 101 grid points could not be used:
 #>   from  to     status n_points
@@ -309,7 +331,7 @@ exceeds about 8.09:
 ``` r
 
 cull <- cm_model(m, cm_impacts(c("d1", "d2", "d3"), c(1.5, 2.0, 1.3), measure = "HR",
-                               estimand = "snapshot_crude", label = "culling"))
+                               label = "culling"))
 th_ev <- cm_threshold(cull, "assoc:d2:d3", c(1, 100), conclusion = "sign",
                       event_model = TRUE, overall_risk = 0.25)
 th_ev$thresholds[, c("item", "status", "threshold", "description")]
@@ -329,20 +351,19 @@ change. Like
 [`cm_threshold()`](https://rasmussenphilip.github.io/deconflate/reference/cm_threshold.md),
 they report point estimates, adjust each scenario as
 [`deconflate()`](https://rasmussenphilip.github.io/deconflate/reference/deconflate.md)
-would (`method = "auto"`), and take `event_model = TRUE` with
-`overall_risk`:
+would, and take `event_model = TRUE` with `overall_risk`:
 
 - [`screen_associations()`](https://rasmussenphilip.github.io/deconflate/reference/screen_associations.md)
-  multiplies each given association by each of `multipliers`, and sets
-  each pair without an association to each of `or_values`;
+  multiplies the crude rows of each pair by each of `multipliers`, and
+  sets each pair without one to each of `or_values`;
 - [`screen_interactions()`](https://rasmussenphilip.github.io/deconflate/reference/screen_interactions.md)
-  adds an interaction of each size in `values` to each pair (additive
-  impacts only; always the global method, with the joint distribution
-  fitted once);
+  sets an interaction of each size in `values` for each pair (additive
+  impacts only; the joint distribution is fitted once);
 - [`screen_three_way()`](https://rasmussenphilip.github.io/deconflate/reference/screen_three_way.md)
-  sets a three-way term for each triple (always the global method);
+  sets an `OR_ratio` row for each triple;
 - [`sensitivity_oat()`](https://rasmussenphilip.github.io/deconflate/reference/sensitivity_oat.md)
-  varies every input by `variation` (20% by default).
+  varies every input (each disease probability and each row) by
+  `variation` (20% by default).
 
 ``` r
 
@@ -363,19 +384,19 @@ screen_associations(m, or_values = c(0.5, 3))
 #>    <NA>
 #>    <NA>
 sensitivity_oat(m)
-#>         input value total_low total_high      swing  rel_swing
-#> 1   impact:d3  7.50  1.844070   2.374387 0.53031715 0.25142703
-#> 2     prob:d3  0.20  1.851628   2.374637 0.52300893 0.24796215
-#> 3   impact:d2  5.00  1.998423   2.220035 0.22161264 0.10506809
-#> 4     prob:d2  0.15  2.026335   2.197276 0.17094138 0.08104449
-#> 5 assoc:d2:d3  3.00  2.170224   2.062015 0.10820854 0.05130242
-#> 6   impact:d1  2.50  2.063348   2.155110 0.09176175 0.04350488
-#> 7     prob:d1  0.10  2.069218   2.149697 0.08047878 0.03815555
-#> 8 assoc:d1:d3  1.00  2.138876   2.084124 0.05475254 0.02595856
-#> 9 assoc:d1:d2  2.00  2.127728   2.093846 0.03388228 0.01606382
+#>            input value total_low total_high      swing  rel_swing
+#> 1      impacts:3  7.50  1.844070   2.374387 0.53031715 0.25142703
+#> 2        prob:d3  0.20  1.851628   2.374637 0.52300893 0.24796215
+#> 3      impacts:2  5.00  1.998423   2.220035 0.22161264 0.10506809
+#> 4        prob:d2  0.15  2.026335   2.197276 0.17094138 0.08104449
+#> 5 associations:3  3.00  2.170224   2.062015 0.10820854 0.05130242
+#> 6      impacts:1  2.50  2.063348   2.155110 0.09176175 0.04350488
+#> 7        prob:d1  0.10  2.069218   2.149697 0.08047878 0.03815555
+#> 8 associations:2  1.00  2.138876   2.084124 0.05475254 0.02595856
+#> 9 associations:1  2.00  2.127728   2.093846 0.03388228 0.01606382
 ```
 
-A three-way term keeps the pairwise tables of its triple fixed, so for
+An `OR_ratio` row keeps the pairwise tables of its triple fixed, so for
 additive impacts without interactions it changes nothing when every pair
 of the triple has an association; with an unknown pair it can:
 
@@ -383,8 +404,8 @@ of the triple has an association; with an unknown pair it can:
 
 screen_three_way(m, ratios = c(0.5, 2))[, c("pair", "scenario", "total", "rel_change")]
 #>      pair    scenario total rel_change
-#>  d1:d2:d3 ratio = 0.5  2.11  -4.06e-11
-#>  d1:d2:d3   ratio = 2  2.11   2.82e-11
+#>  d1:d2:d3   ratio = 2  2.11  -3.28e-10
+#>  d1:d2:d3 ratio = 0.5  2.11   6.40e-11
 screen_three_way(m_unk, ratios = c(0.5, 2))[, c("pair", "scenario", "total", "rel_change")]
 #>      pair    scenario total rel_change
 #>  d1:d2:d3   ratio = 2  2.06    -0.0144
@@ -457,20 +478,27 @@ can leave out `associations` for this purpose.
 
 ### What limits the number of diseases
 
-The simultaneous method (and the published approximation in
-[`compare_methods()`](https://rasmussenphilip.github.io/deconflate/reference/compare_methods.md))
-uses the pairwise 2x2 tables only. It never enumerates combinations of
-diseases, so it works for any number of diseases (the default triple
-screen checks n(n-1)(n-2)/6 triples; the exact LP feasibility check is
-limited to 14 diseases).
+When the pairwise 2x2 tables give the model’s answer (crude pair rows
+for every pair, one-disease impact rows, additive impacts),
+[`deconflate()`](https://rasmussenphilip.github.io/deconflate/reference/deconflate.md)
+uses them directly, as does the published approximation in
+[`compare_methods()`](https://rasmussenphilip.github.io/deconflate/reference/compare_methods.md).
+They never enumerate combinations of diseases, so they work for any
+number of diseases. Up to 20 diseases,
+[`deconflate()`](https://rasmussenphilip.github.io/deconflate/reference/deconflate.md)
+still fits the distribution of combinations once, to check that the rows
+can hold together; beyond that it relies on the triple screen of
+[`check_feasibility()`](https://rasmussenphilip.github.io/deconflate/reference/check_feasibility.md)
+(n(n-1)(n-2)/6 triples; the exact LP check is limited to 14 diseases).
 
-The global method needs the joint distribution of disease combinations,
-for interactions, unknown pairs and three-way terms, and so does the
-snapshot model of event impacts. The exact backend of
+Everything else needs the joint distribution of disease combinations:
+unknown pairs, rows about combinations or subgroups, interactions, and
+the snapshot model of event impacts. The exact backend of
 [`fit_joint()`](https://rasmussenphilip.github.io/deconflate/reference/fit_joint.md)
 enumerates all 2^n combinations, which limits it to about 20 diseases
 (`max_diseases`). For more, the sampled backend fits the same
-maximum-entropy model without enumeration.
+maximum-entropy model without enumeration, for crude pair rows (rows
+about combinations or subgroups need the exact backend).
 [`deconflate()`](https://rasmussenphilip.github.io/deconflate/reference/deconflate.md)
 uses it automatically when a model with more than 20 diseases needs the
 joint distribution, and says so in a note;
@@ -481,15 +509,14 @@ joint distribution, and says so in a note;
 The sampled backend works in three steps:
 
 1.  **Calibration.** The model has a main effect for each disease and an
-    interaction parameter for each constrained pair (three-way terms are
-    fixed at the log of their ratios). Many parallel Gibbs chains
-    (`n_chains`) estimate the disease probabilities and pairwise tables
-    implied by the current parameters, and the parameters are updated by
-    the differences between the target and estimated logits and log odds
-    ratios, until the estimates match the targets within Monte Carlo
-    error. The interaction parameters are conditional log odds ratios,
-    given the other diseases. They are calibrated, not set to the
-    marginal log odds ratios of the inputs, which are only their
+    interaction parameter for each constrained pair. Many parallel Gibbs
+    chains (`n_chains`) estimate the disease probabilities and pairwise
+    tables implied by the current parameters, and the parameters are
+    updated by the differences between the target and estimated logits
+    and log odds ratios, until the estimates match the targets within
+    Monte Carlo error. The interaction parameters are conditional log
+    odds ratios, given the other diseases. They are calibrated, not set
+    to the marginal log odds ratios of the inputs, which are only their
     starting values: with several associated diseases, the two differ.
 2.  **Sampling.** `n_samples` combinations are drawn from the calibrated
     model.
@@ -501,9 +528,9 @@ The sampled backend works in three steps:
     the odds ratios of unknown pairs.
 
 The result has the same form as an exact fit (the distinct sampled
-combinations and their weights), so the global method, interaction
-offsets, Shapley allocation and the snapshot model of event impacts use
-it unchanged. Its `diagnostics` report:
+combinations and their weights), so the adjustment, interactions,
+Shapley allocation and the snapshot model of event impacts use it
+unchanged. Its `diagnostics` report:
 
 - the constraint residual of the raw sample and after raking;
 - R-hat and effective sample sizes of the fitted probabilities and
@@ -523,7 +550,7 @@ js <- fit_joint(m, backend = "sampled", n_samples = 20000, n_chains = 500, seed 
 js
 #> <cm_joint> 3 diseases, 8 combinations (sampled backend)
 #>   Converged: TRUE after 17 calibration iterations (max residual 1.08e-11)
-#>   Constrained pairs: 3
+#>   Association rows: 3
 #>   Sample: 20000 draws from 500 chains, 8 distinct combinations
 #>   Constraint residual: 9.55e-03 in the sample, 1.08e-11 after raking; max R-hat 1.002; min ESS 16763
 js$diagnostics$summary
@@ -574,17 +601,17 @@ rbind(exact = by_n(je), seed_11 = by_n(js), seed_12 = by_n(js2))
 #> seed_12 0.6426916 0.2731317 0.07566194 0.008514817
 ```
 
-With an interaction, the global method depends on probabilities of
-disease triples, which the sampled fit approximates:
+With an interaction, the adjustment depends on probabilities of disease
+triples, which the sampled fit approximates:
 
 ``` r
 
 mi <- set_interaction(m, "d1", "d2", 1)
 rbind(exact = deconflate(mi, n_draws = 0, joint = je)$adjusted$adjusted,
       sampled = deconflate(mi, n_draws = 0, joint = js)$adjusted$adjusted)
-#>             [,1]     [,2]     [,3]
-#> exact   1.913880 3.240641 6.935621
-#> sampled 1.913888 3.240574 6.935939
+#>             [,1]     [,2]     [,3] [,4]
+#> exact   1.913880 3.240641 6.935621    1
+#> sampled 1.913888 3.240574 6.935939    1
 ```
 
 A fitted joint can be passed to
@@ -593,8 +620,7 @@ A fitted joint can be passed to
 and
 [`cm_threshold()`](https://rasmussenphilip.github.io/deconflate/reference/cm_threshold.md)
 with `joint`. Alternatively, the fitting arguments can be passed through
-`...`,
-e.g. `deconflate(m, method = "global", backend = "sampled", n_samples = 20000)`.
+`...`, e.g. `deconflate(m, backend = "sampled", n_samples = 20000)`.
 
 ### Unresolved is not infeasible
 
@@ -654,7 +680,7 @@ tryCatch(fit_joint(pop24), deconflate_error = function(e) conditionMessage(e))
 #> [1] "24 diseases give 2^24 cells; use backend = \"sampled\", or increase `max_diseases` if intended."
 ```
 
-The unknown pairs need the global method, and with 24 diseases
+The unknown pairs need the joint distribution, and with 24 diseases
 [`deconflate()`](https://rasmussenphilip.github.io/deconflate/reference/deconflate.md)
 fits the joint distribution with the sampled backend (with the default
 `n_samples` and `n_chains` of
@@ -670,12 +696,11 @@ it with `joint`:
 set.seed(3)
 r24 <- deconflate(m24, n_draws = 0)
 r24$notes
-#> [1] "The global method was used because of 253 pairs without an association (unknown)."             
-#> [2] "With 24 diseases, the joint distribution was fitted with the sampled backend (see ?fit_joint)."
+#> [1] "With 24 diseases, the joint distribution was fitted with the sampled backend (see ?fit_joint)."
 r24$joint
 #> <cm_joint> 24 diseases, 24537 combinations (sampled backend)
 #>   Converged: TRUE after 17 calibration iterations (max residual 2.32e-12)
-#>   Constrained pairs: 23
+#>   Association rows: 23
 #>   Sample: 50000 draws from 1000 chains, 24537 distinct combinations
 #>   Constraint residual: 4.70e-03 in the sample, 2.32e-12 after raking; max R-hat 1.002; min ESS 43146
 r24$totals

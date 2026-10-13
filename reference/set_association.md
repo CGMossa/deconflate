@@ -1,6 +1,8 @@
 # Set or replace one association
 
-Set or replace one association
+Replaces the crude pair rows of a pair (one disease on each side, no
+subgroup, not adjusted) by one row with the given value, or adds that
+row. Other rows about the pair (e.g. within subgroups) are kept.
 
 ## Usage
 
@@ -32,5 +34,5 @@ set_association(model, disease1, disease2, value, measure = "OR")
 
 ## Value
 
-The modified object. A distribution of the pair's association in the
-model's `distributions` is dropped (the scenario value is fixed).
+The modified object. Distributions of replaced rows are dropped (the
+scenario value is fixed).

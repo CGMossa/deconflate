@@ -5,8 +5,8 @@
 library(deconflate)
 ```
 
-Any input can be uncertain: a disease probability, an association, a
-three-way term, an impact, an interaction, and, for event impacts, the
+Any input can be uncertain: a disease probability, an association row,
+an impact row (including interactions), and, for event impacts, the
 overall risk.
 [`deconflate()`](https://rasmussenphilip.github.io/deconflate/reference/deconflate.md)
 draws the uncertain inputs from their distributions, adjusts each draw
@@ -52,9 +52,12 @@ keeps it in the model (see
 In R, give them to
 [`cm_model()`](https://rasmussenphilip.github.io/deconflate/reference/cm_model.md)
 as `distributions`, a named list whose names are keys: `prob:<disease>`,
-`assoc:<d1>:<d2>`, `three:<d1>:<d2>:<d3>`, `impact:<disease>` and
-`inter:<d1>:<d2>`. Inputs without a distribution keep their point value
-in every draw.
+`associations:<row>` and `impacts:<row>` (rows numbered from 1 in each
+table). Shorter keys name the usual rows: `assoc:<d1>:<d2>` (a pair’s
+crude row), `impact:<disease>` (a disease’s row), `inter:<d1>:<d2>` (an
+interaction adjusted for all) and `three:<d1>:<d2>:<d3>` (an `OR_ratio`
+row). Inputs without a distribution keep their point value in every
+draw.
 
 ``` r
 
@@ -69,9 +72,10 @@ mu <- cm_model(m, m$impacts, distributions = list(
 mu
 #> <cm_model>
 #>   Diseases: 3 (d1, d2, d3)
-#>   Disease pairs: 3 (3 with an association, 0 unknown)
+#>   Association rows: 3 (OR: 3)
+#>   Disease pairs: 3 (3 with a crude pair row, 0 unknown)
 #>   Impacts: yield [%] (additive)
-#>   Estimands: crude: 3
+#>   Impact rows: 3 (0 adjusted, 0 within subgroups)
 #>   Uncertain inputs (with a distribution): 5
 ```
 
@@ -87,7 +91,7 @@ probabilities, associations and impacts is propagated jointly:
 
 r <- deconflate(mu, n_draws = 200, seed = 1)
 r
-#> <cm_result> method: simultaneous; yield [%]
+#> <cm_result> pairwise shortcut; yield [%]
 #> 
 #>  disease raw adjusted  lower upper   change
 #>       d1 2.5    2.143 0.9455 3.134 -0.14270
@@ -95,7 +99,7 @@ r
 #>       d3 7.5    6.934 5.0366 8.176 -0.07544
 #> 
 #> Raw sum: 2.5; adjusted total: 2.109 (95% interval 1.668 to 2.454)
-#> Diagnostics: residual 8.88e-16, condition number 1.53, sign changes 0
+#> Diagnostics: residual 0.00e+00, condition number 1.53, sign changes 0
 #> Uncertainty: 95% intervals from 200 draws (0 rejected; random sampling; seed 1).
 ```
 
@@ -193,7 +197,7 @@ given a normal distribution that reaches below zero:
 m_rej <- cm_model(m, m$impacts, distributions = list("prob:d1" = dist_normal(0.05, 0.05)))
 r_rej <- deconflate(m_rej, n_draws = 200, seed = 1)
 r_rej
-#> <cm_result> method: simultaneous; yield [%]
+#> <cm_result> pairwise shortcut; yield [%]
 #> 
 #>  disease raw adjusted lower upper   change
 #>       d1 2.5    2.143 2.108 2.159 -0.14270
@@ -240,7 +244,7 @@ table(r_strong$draws$rejections$type)
 #> infeasible 
 #>         15
 r_strong$draws$rejections$reason[1]
-#> [1] "The pairwise associations are jointly infeasible: no population has all of them (conflicting triples: a-b-c). See check_feasibility()."
+#> [1] "The associations cannot all hold together: no population has all of them (conflicting triples: a-b-c). See check_feasibility()."
 ```
 
 Report the rejection share: conditioning on acceptance changes the
@@ -261,7 +265,7 @@ above:
 
 r_lhs <- deconflate(mu, n_draws = 200, seed = 1, sampling = "lhs")
 r_lhs
-#> <cm_result> method: simultaneous; yield [%]
+#> <cm_result> pairwise shortcut; yield [%]
 #> 
 #>  disease raw adjusted lower upper   change
 #>       d1 2.5    2.143 1.168 3.137 -0.14270
@@ -269,7 +273,7 @@ r_lhs
 #>       d3 7.5    6.934 5.168 8.360 -0.07544
 #> 
 #> Raw sum: 2.5; adjusted total: 2.109 (95% interval 1.658 to 2.39)
-#> Diagnostics: residual 8.88e-16, condition number 1.53, sign changes 0
+#> Diagnostics: residual 0.00e+00, condition number 1.53, sign changes 0
 #> Uncertainty: 95% intervals from 200 draws (0 rejected; Latin hypercube sampling; seed 1).
 data.frame(quantity = r$draws$summary$quantity,
            mcse_random = r$draws$summary$mcse,
@@ -285,6 +289,44 @@ data.frame(quantity = r$draws$summary$quantity,
 #> 8         raw_sum 0.017266899 0.0022140969
 ```
 
+## Several rows for one item
+
+When several association rows are pooled (see
+[`vignette("interactions")`](https://rasmussenphilip.github.io/deconflate/articles/interactions.md)),
+each draw draws every row from its own distribution and pools the drawn
+values with the weights of the central estimate. With random effects
+(the default), the draw also adds the between-study spread: a standard
+normal draw times tau, on the log scale, listed among the drawn inputs
+as `between:associations:<rows>`. Impact rows that over-determine the
+impacts are fitted in each draw by weighted least squares, with the
+weights of the central estimate. Here two studies of the d1:d2 odds
+ratio disagree (I^2 above 90%):
+
+``` r
+
+a2 <- cm_associations(c("d1", "d1", "d1", "d2"), c("d2", "d2", "d3", "d3"), c(1.8, 4, 1, 3))
+m2 <- cm_model(m$diseases, m$impacts, associations = a2,
+               distributions = list("associations:1" = dist_lognormal_ci(1.8, 1.3, 2.5),
+                                    "associations:2" = dist_lognormal_ci(4, 3.4, 4.7)))
+r2 <- deconflate(m2, n_draws = 200, seed = 1)
+r2$heterogeneity
+#>          table    item rows k          scale   pooled method        Q df
+#> 1 associations d1 ~ d2 1, 2 2 log odds ratio 2.718809 random 18.40048  1
+#>             p        I2      tau2
+#> 1 1.79013e-05 0.9456536 0.3014812
+grep("between", names(r2$draws$specs), value = TRUE)
+#> [1] "between:associations:1,2"
+r2_fixed <- deconflate(m2, n_draws = 200, seed = 1, pool = "fixed")
+rbind(random = unlist(r2$totals[c("adjusted_total", "adjusted_total_lower", "adjusted_total_upper")]),
+      fixed = unlist(r2_fixed$totals[c("adjusted_total", "adjusted_total_lower", "adjusted_total_upper")]))
+#>        adjusted_total adjusted_total_lower adjusted_total_upper
+#> random       2.083284             2.020904             2.154693
+#> fixed        2.064029             2.051997             2.074198
+```
+
+The fixed-effect interval is narrower: it treats the two studies as
+estimates of one value, which their disagreement contradicts.
+
 ## Event impacts: the overall risk
 
 For event impacts
@@ -296,12 +338,11 @@ mean of that distribution:
 ``` r
 
 cull <- cm_model(m, cm_impacts(c("d1", "d2", "d3"), c(1.5, 2.0, 1.2),
-                               measure = c("HR", "HR", "RR"),
-                               estimand = "snapshot_crude", label = "culling"))
+                               measure = c("HR", "HR", "RR"), label = "culling"))
 e <- deconflate(cull, event_model = TRUE, overall_risk = dist_beta(250, 750),
                 n_draws = 200, seed = 1)
 e
-#> <cm_event_result> culling; method: snapshot
+#> <cm_event_result> culling; snapshot
 #> 
 #>  disease measure raw adjusted_hr lower upper
 #>       d1      HR 1.5       1.382 1.382 1.382
@@ -316,13 +357,13 @@ e
 #>       d2     0.023888 0.6780 0.022378 0.025504
 #>       d3     0.003981 0.1130 0.003517 0.004549
 #> 
-#> Diagnostics: residual 5.27e-16, condition number 1.72, sign changes 0
+#> Diagnostics: residual 6.76e-12, condition number 1.72, sign changes 0
 #> Uncertainty: 95% intervals from 200 draws (0 rejected; random sampling; seed 1).
 e$attributable$summary
-#>   overall_risk disease_free_risk attributable attributable_fraction unallocated
-#> 1         0.25         0.2147648   0.03523521             0.1409408           0
-#>   attributable_lower attributable_upper
-#> 1         0.03276159         0.03796451
+#>   overall_risk disease_free_risk attributable attributable_fraction
+#> 1         0.25         0.2147648   0.03523521             0.1409408
+#>    unallocated attributable_lower attributable_upper
+#> 1 1.734723e-16         0.03276159         0.03796451
 ```
 
 Here only the overall risk is uncertain. The attributable risk and its
@@ -337,8 +378,7 @@ runs several methods on the same inputs, including the approximation of
 Rasmussen et al. (2022, eq. 16) (`"published"`), kept for comparison
 with earlier analyses only. With `n_draws` (default 0), every method is
 applied to the same draws; a draw is rejected if any method fails on it.
-There is no automatic switch of method here: methods that cannot be run
-are listed in `$failed`.
+Methods that cannot be run are listed in `$failed`.
 
 ``` r
 
@@ -346,32 +386,32 @@ mu2 <- cm_model(m, m$impacts, distributions = list(
   "assoc:d1:d2" = dist_lognormal_ci(2, 1.4, 2.9),
   "impact:d2" = dist_normal(5, 1)
 ))
-cmp <- compare_methods(mu2, methods = c("published", "simultaneous"), n_draws = 200, seed = 1)
+cmp <- compare_methods(mu2, n_draws = 200, seed = 1)
 cmp
-#> <cm_comparison> methods: published, simultaneous
+#> <cm_comparison> methods: published, deconflate
 #> Impacts: yield
 #> Units: %
 #> 
 #> Adjusted values:
-#>  disease raw published simultaneous
-#>       d1 2.5      2.07         2.14
-#>       d2 5.0      3.70         3.39
-#>       d3 7.5      6.75         6.93
+#>  disease raw published deconflate
+#>       d1 2.5      2.07       2.14
+#>       d2 5.0      3.70       3.39
+#>       d3 7.5      6.75       6.93
 #> 
 #> Totals:
-#>        method raw_sum adjusted_total
-#>     published     2.5          2.111
-#>  simultaneous     2.5          2.109
+#>      method raw_sum adjusted_total
+#>   published     2.5          2.111
+#>  deconflate     2.5          2.109
 #> 
 #> Uncertainty (200 draws, 0 rejected): mean and 95% interval of the total
-#>        method  mean lower upper stability
-#>     published 2.107 1.945 2.333        ok
-#>  simultaneous 2.102 1.928 2.333        ok
+#>      method  mean lower upper stability
+#>   published 2.107 1.945 2.333        ok
+#>  deconflate 2.102 1.928 2.333        ok
 s <- cmp$draws$summary
 s[s$quantity == "adjusted:d2", c("method", "mean", "lower", "upper")]
-#>          method     mean    lower    upper
-#> 2     published 3.658327 2.303267 5.664957
-#> 10 simultaneous 3.332220 1.759484 5.555188
+#>        method     mean    lower    upper
+#> 2   published 3.658327 2.303267 5.664957
+#> 10 deconflate 3.332220 1.759484 5.555188
 ```
 
 ## Gaps and values over the draws
@@ -407,7 +447,7 @@ The central gap uses the central total:
 ## Sensitivity
 
 The sensitivity tools give point estimates (they do not run draws), and
-choose the method as
+adjust each scenario as
 [`deconflate()`](https://rasmussenphilip.github.io/deconflate/reference/deconflate.md)
 does. They also accept `event_model = TRUE` with `overall_risk`.
 One-at-a-time sensitivity (as in Rasmussen et al. 2024, Fig. 7):
@@ -415,16 +455,16 @@ One-at-a-time sensitivity (as in Rasmussen et al. 2024, Fig. 7):
 ``` r
 
 sensitivity_oat(example_supplement(), variation = 0.2)
-#>         input value total_low total_high      swing  rel_swing
-#> 1   impact:d3  7.50  1.844070   2.374387 0.53031715 0.25142703
-#> 2     prob:d3  0.20  1.851628   2.374637 0.52300893 0.24796215
-#> 3   impact:d2  5.00  1.998423   2.220035 0.22161264 0.10506809
-#> 4     prob:d2  0.15  2.026335   2.197276 0.17094138 0.08104449
-#> 5 assoc:d2:d3  3.00  2.170224   2.062015 0.10820854 0.05130242
-#> 6   impact:d1  2.50  2.063348   2.155110 0.09176175 0.04350488
-#> 7     prob:d1  0.10  2.069218   2.149697 0.08047878 0.03815555
-#> 8 assoc:d1:d3  1.00  2.138876   2.084124 0.05475254 0.02595856
-#> 9 assoc:d1:d2  2.00  2.127728   2.093846 0.03388228 0.01606382
+#>            input value total_low total_high      swing  rel_swing
+#> 1      impacts:3  7.50  1.844070   2.374387 0.53031715 0.25142703
+#> 2        prob:d3  0.20  1.851628   2.374637 0.52300893 0.24796215
+#> 3      impacts:2  5.00  1.998423   2.220035 0.22161264 0.10506809
+#> 4        prob:d2  0.15  2.026335   2.197276 0.17094138 0.08104449
+#> 5 associations:3  3.00  2.170224   2.062015 0.10820854 0.05130242
+#> 6      impacts:1  2.50  2.063348   2.155110 0.09176175 0.04350488
+#> 7        prob:d1  0.10  2.069218   2.149697 0.08047878 0.03815555
+#> 8 associations:2  1.00  2.138876   2.084124 0.05475254 0.02595856
+#> 9 associations:1  2.00  2.127728   2.093846 0.03388228 0.01606382
 ```
 
 Screening associations, including pairs with no estimate, finds those

@@ -51,7 +51,7 @@ by 10%?&quot;.
     <li><a class="dropdown-item" href="../articles/thresholds-and-scaling.html">Threshold searches and many diseases</a></li>
     <li><a class="dropdown-item" href="../articles/event-impacts.html">Event impacts (culling and mortality)</a></li>
     <li><a class="dropdown-item" href="../articles/reproducing-published.html">Reproducing the published analyses</a></li>
-    <li><a class="dropdown-item" href="../articles/interactions.html">Disease combinations, interactions and attribution</a></li>
+    <li><a class="dropdown-item" href="../articles/interactions.html">Disease combinations, subgroups and interactions</a></li>
     <li><a class="dropdown-item" href="../articles/uncertainty.html">Uncertainty and sensitivity</a></li>
   </ul></li>
 <li class="nav-item"><a class="nav-link" href="../news/index.html">Changelog</a></li>
@@ -96,7 +96,6 @@ by 10%?".</p></li>
 <span>  target <span class="op">=</span> <span class="cn">NULL</span>,</span>
 <span>  diseases <span class="op">=</span> <span class="cn">NULL</span>,</span>
 <span>  by <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"contribution"</span>, <span class="st">"adjusted"</span><span class="op">)</span>,</span>
-<span>  method <span class="op">=</span> <span class="st">"auto"</span>,</span>
 <span>  event_model <span class="op">=</span> <span class="cn">FALSE</span>,</span>
 <span>  overall_risk <span class="op">=</span> <span class="cn">NULL</span>,</span>
 <span>  n_grid <span class="op">=</span> <span class="fl">101L</span>,</span>
@@ -115,13 +114,15 @@ by 10%?".</p></li>
 
 
 <dt id="arg-input">input<a class="anchor" aria-label="anchor" href="#arg-input"></a></dt>
-<dd><p>The input to vary, keyed as in <code><a href="cm_model.html">cm_model()</a></code>
-(<code>distributions</code>): <code>"assoc:&lt;d1&gt;:&lt;d2&gt;"</code> (the pair's association, on its
-measure; a pair without an association is varied as an odds ratio, so
-unknown pairs can be explored), <code>"inter:&lt;d1&gt;:&lt;d2&gt;"</code> (an interaction),
-<code>"prob:&lt;disease&gt;"</code> (the disease's <code>value</code>, on the scale it was entered),
-<code>"impact:&lt;disease&gt;"</code> (a raw impact), <code>"three:&lt;d1&gt;:&lt;d2&gt;:&lt;d3&gt;"</code> (a
-three-way ratio), or, for event impacts, <code>"risk"</code> (the overall risk).</p></dd>
+<dd><p>The input to vary: <code>"assoc:&lt;d1&gt;:&lt;d2&gt;"</code> (the pair's crude
+pair row, on its measure; a pair without one is varied as an odds
+ratio, so unknown pairs can be explored), <code>"inter:&lt;d1&gt;:&lt;d2&gt;"</code> (an
+interaction, see <code><a href="set_interaction.html">set_interaction()</a></code>), <code>"prob:&lt;disease&gt;"</code> (the disease's
+<code>value</code>, on the scale it was entered), <code>"impact:&lt;disease&gt;"</code> (the impact
+row of a disease, when it has one), <code>"three:&lt;d1&gt;:&lt;d2&gt;:&lt;d3&gt;"</code> (an
+OR_ratio, see <code><a href="set_three_way.html">set_three_way()</a></code>), <code>"associations:&lt;row&gt;"</code> or
+<code>"impacts:&lt;row&gt;"</code> (any row, by its number), or, for event impacts,
+<code>"risk"</code> (the overall risk).</p></dd>
 
 
 <dt id="arg-range">range<a class="anchor" aria-label="anchor" href="#arg-range"></a></dt>
@@ -147,9 +148,9 @@ them) and <code>"sign"</code>.</p></dd>
 <dd><p>For <code>"rank"</code>: <code>"contribution"</code> (default) or <code>"adjusted"</code>.</p></dd>
 
 
-<dt id="arg-method-event-model-overall-risk">method, event_model, overall_risk<a class="anchor" aria-label="anchor" href="#arg-method-event-model-overall-risk"></a></dt>
-<dd><p>As in <code><a href="deconflate.html">deconflate()</a></code> (a
-distribution of the overall risk is used at its mean).</p></dd>
+<dt id="arg-event-model-overall-risk">event_model, overall_risk<a class="anchor" aria-label="anchor" href="#arg-event-model-overall-risk"></a></dt>
+<dd><p>As in <code><a href="deconflate.html">deconflate()</a></code> (a distribution of
+the overall risk is used at its mean).</p></dd>
 
 
 <dt id="arg-n-grid">n_grid<a class="anchor" aria-label="anchor" href="#arg-n-grid"></a></dt>
@@ -183,7 +184,8 @@ bracket), <code>scan</code> (each grid point with its status, the aggregate and 
 condition number), <code>regions</code> (stretches of unusable grid points),
 <code>summary</code> (per item: number of thresholds, and whether part of the range
 could not be evaluated), and the settings (<code>input</code>, <code>range</code>, <code>baseline</code>
-value of the input, <code>method</code>, <code>conclusion</code>, <code>target</code>, <code>fixed</code>).</p>
+value of the input, <code>method</code> (the computations used), <code>conclusion</code>,
+<code>target</code>, <code>fixed</code>).</p>
     </div>
     <div class="section level2">
     <h2 id="details">Details<a class="anchor" aria-label="anchor" href="#details"></a></h2>
@@ -217,11 +219,11 @@ stretches of unusable grid points are listed in <code>regions</code>, so that "n
 crossing found" can be told apart from "part of the range could not be
 evaluated". A sign change between usable points separated by unusable
 ones is not reported as a crossing; such stretches appear in <code>regions</code>.</p>
-<p>Each point is adjusted as <code><a href="deconflate.html">deconflate()</a></code> would (point estimates; the
-method is chosen for the point's own inputs). When the input is an
-impact, an interaction or the overall risk (which do not change the joint
-distribution) and the adjustment uses the joint distribution, it is
-fitted once and reused (or the <code>joint</code> passed through <code>...</code> is used).</p>
+<p>Each point is adjusted as <code><a href="deconflate.html">deconflate()</a></code> would (point estimates). When
+the input is an impact row, an interaction or the overall risk (which do
+not change the joint distribution) and the adjustment uses the joint
+distribution, it is fitted once and reused (or the <code>joint</code> passed through
+<code>...</code> is used).</p>
 <p>Thresholds are deterministic: they are for the model's input values.</p>
     </div>
 
@@ -231,7 +233,7 @@ fitted once and reused (or the <code>joint</code> passed through <code>...</code
 <span class="r-in"><span><span class="co"># At what odds ratio between d1 and d2 does the ranking change?</span></span></span>
 <span class="r-in"><span><span class="va">th</span> <span class="op">&lt;-</span> <span class="fu">cm_threshold</span><span class="op">(</span><span class="va">m</span>, <span class="st">"assoc:d1:d2"</span>, <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="fl">0.2</span>, <span class="fl">20</span><span class="op">)</span>, conclusion <span class="op">=</span> <span class="st">"rank"</span><span class="op">)</span></span></span>
 <span class="r-in"><span><span class="va">th</span></span></span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> &lt;cm_threshold&gt; rank over assoc:d1:d2 in [0.2, 20] (baseline 2; method simultaneous)</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> &lt;cm_threshold&gt; rank over assoc:d1:d2 in [0.2, 20] (baseline 2; method pairwise shortcut)</span>
 <span class="r-out co"><span class="r-pr">#&gt;</span> Fixed: all inputs other than assoc:d1:d2 at the model's values.</span>
 <span class="r-out co"><span class="r-pr">#&gt;</span> </span>
 <span class="r-out co"><span class="r-pr">#&gt;</span> No crossing found in the range.</span>
@@ -240,8 +242,8 @@ fitted once and reused (or the <code>joint</code> passed through <code>...</code
 <span class="r-in"><span><span class="fu">cm_threshold</span><span class="op">(</span><span class="va">m</span>, <span class="st">"assoc:d1:d3"</span>, <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="fl">1</span>, <span class="fl">50</span><span class="op">)</span>, conclusion <span class="op">=</span> <span class="st">"change"</span>, target <span class="op">=</span> <span class="op">-</span><span class="fl">0.1</span><span class="op">)</span><span class="op">$</span><span class="va">thresholds</span></span></span>
 <span class="r-out co"><span class="r-pr">#&gt;</span>   conclusion  item    status threshold    lower    upper        below</span>
 <span class="r-out co"><span class="r-pr">#&gt;</span> 1     change total threshold  5.263907 5.263907 5.263907 4.931178e-10</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span>           above                                  description</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> 1 -3.748852e-10 the aggregate falls below the baseline - 10%</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span>          above                                  description</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 1 -3.74885e-10 the aggregate falls below the baseline - 10%</span>
 </code></pre></div>
     </div>
   </main><aside class="col-md-3"><nav id="toc" aria-label="Table of contents"><h2>On this page</h2>

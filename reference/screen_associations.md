@@ -14,12 +14,12 @@ et al. (2022), Fig. 3 and Rasmussen et al. (2024), Fig. 7C-D.
 ``` r
 screen_associations(
   model,
-  method = "auto",
   event_model = FALSE,
   overall_risk = NULL,
   or_values = c(0.5, 2),
   multipliers = c(0.5, 2),
-  pairs = NULL
+  pairs = NULL,
+  ...
 )
 ```
 
@@ -30,11 +30,6 @@ screen_associations(
   A
   [`cm_model()`](https://rasmussenphilip.github.io/deconflate/reference/cm_model.md).
 
-- method:
-
-  As in
-  [`deconflate()`](https://rasmussenphilip.github.io/deconflate/reference/deconflate.md).
-
 - event_model, overall_risk:
 
   As in
@@ -43,15 +38,20 @@ screen_associations(
 
 - or_values:
 
-  Odds ratios tried for pairs without an association.
+  Odds ratios tried for pairs without a crude pair row.
 
 - multipliers:
 
-  Factors applied to given associations.
+  Factors applied to the crude pair rows of a pair (all of them, when a
+  pair has several).
 
 - pairs:
 
   Optional character vector of pairs (`"d1:d2"`); default all.
+
+- ...:
+
+  Not used.
 
 ## Value
 
@@ -68,8 +68,7 @@ disease independent (adjusted impacts equal the raw ones), and the
 screen shows which pairs would matter if they were associated. Each
 scenario is adjusted as
 [`deconflate()`](https://rasmussenphilip.github.io/deconflate/reference/deconflate.md)
-would (point estimates; the method is chosen for the scenario's own
-inputs, see `method`).
+would (point estimates).
 
 The total is the adjusted aggregate for additive impacts, and the risk
 attributable to disease for event impacts (`event_model = TRUE`);

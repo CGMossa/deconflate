@@ -40,7 +40,7 @@
     <li><a class="dropdown-item" href="articles/thresholds-and-scaling.html">Threshold searches and many diseases</a></li>
     <li><a class="dropdown-item" href="articles/event-impacts.html">Event impacts (culling and mortality)</a></li>
     <li><a class="dropdown-item" href="articles/reproducing-published.html">Reproducing the published analyses</a></li>
-    <li><a class="dropdown-item" href="articles/interactions.html">Disease combinations, interactions and attribution</a></li>
+    <li><a class="dropdown-item" href="articles/interactions.html">Disease combinations, subgroups and interactions</a></li>
     <li><a class="dropdown-item" href="articles/uncertainty.html">Uncertainty and sensitivity</a></li>
   </ul>
 </li>
@@ -89,7 +89,7 @@
 <tbody>
 <tr>
 <td><code>lpSolve</code></td>
-<td>The exact feasibility check (<code>check_feasibility(method = "lp")</code>, <code>deconflate(feasibility = "lp")</code>). Without it, the triple screen is used.</td>
+<td>The exact feasibility check of the pairwise tables (<code>check_feasibility(method = "lp")</code>). Without it, the triple screen is used.</td>
 </tr>
 <tr>
 <td>
@@ -113,14 +113,15 @@
 <div class="section level2">
 <h2 id="how-it-works">How it works<a class="anchor" aria-label="anchor" href="#how-it-works"></a>
 </h2>
-<p>A model has the disease probabilities, their pairwise associations and <strong>one</strong> table of impact estimates. You give each table as a CSV file (with any name) or a data frame, and adjust one impact table per call; for several outcomes, repeat the call. The package assumes no species, outcome or unit.</p>
+<p>A model has three tables: the diseases, the association estimates and <strong>one</strong> table of impact estimates. You give each table as a CSV file (with any name) or a data frame, and adjust one impact table per call; for several outcomes, repeat the call. The package assumes no species, outcome or unit.</p>
+<p>Every association and impact row has the same core columns: <code>disease</code>, <code>among</code> (a subgroup), <code>adjusted_for</code>, <code>measure</code> and <code>value</code>. A row can be about one disease or a combination (<code>"MAS;SCK"</code>), hold in the whole population or within a subgroup (<code>"SCK"</code>, <code>"no SCK"</code>, <code>"no others"</code>), and be crude or adjusted for other diseases; several rows can describe the same thing (several studies), and are pooled or fitted together.</p>
 <ul>
 <li>
-<strong>Additive impacts</strong> (the default) are in any units (kg of milk, percent of yield, days, euros, welfare scores), the same for every row; results come back in those units. Each estimate declares its estimand: a crude comparison (<code>"crude"</code>) or the coefficient of an additive regression adjusted for named diseases (<code>"adjusted_linear"</code>). Pairwise interactions can be added.</li>
+<strong>Additive impacts</strong> (the default) are in any units (kg of milk, percent of yield, days, euros, welfare scores), the same for every row; results come back in those units. A row about a combination adds an interaction.</li>
 <li>
 <strong>Event impacts</strong> (<code>event_model = TRUE</code>, with <code>overall_risk</code>) are hazard ratios, rate ratios, risk ratios, odds ratios or risk differences of an event such as culling or death, which can be mixed. They are adjusted with the snapshot hazard model, and the result includes the risk attributable to disease, split by disease.</li>
 </ul>
-<p><code>method = "auto"</code> (the default) uses the simultaneous method (the exact solution of <code>raw = A b</code> from the pairwise 2×2 tables) when every pair has an association and there are no interactions or three-way terms; otherwise it uses the global method (the maximum-entropy distribution of disease combinations), with a note saying why. Pairs without an association are unknown and are filled in by the global fit; an odds ratio of 1 states that two diseases are unrelated.</p>
+<p>There is one model: the maximum-entropy distribution of disease combinations that matches every association row, and the impacts (and interactions) that reproduce every impact row. Pairs without an association are unknown and are filled in by the fit; an odds ratio of 1 states that two diseases are unrelated. When the pairwise 2×2 tables give the same answer (additive impacts, crude pair rows for every pair and nothing else, impact rows about single diseases in the whole population), <code><a href="reference/deconflate.html">deconflate()</a></code> uses them directly.</p>
 <p>Inputs can carry distributions; <code><a href="reference/deconflate.html">deconflate()</a></code> then runs 1000 draws by default (<code>n_draws</code>) and reports intervals. The proportional approximation of Rasmussen et al. (2022, eq. 16) is not a method of <code><a href="reference/deconflate.html">deconflate()</a></code>: it is kept as <code>"published"</code> in <code><a href="reference/compare_methods.html">compare_methods()</a></code> and the <code>reproduce_*()</code> functions, for comparison and reproduction only.</p>
 <p>The package reports adjusted impacts and contributions in the units of the impacts. Converting them into a productivity gap or a monetary value is a few lines of base R (see <code><a href="articles/deconflate.html">vignette("deconflate")</a></code>).</p>
 </div>
@@ -161,9 +162,9 @@
 </h2>
 <ul>
 <li>
-<strong>Inputs:</strong> <code><a href="reference/cm_read_inputs.html">cm_read_inputs()</a></code> reads CSV files or data frames (each table a named argument) and reports every problem at once (<code><a href="reference/cm_check_inputs.html">cm_check_inputs()</a></code>); uncertain values carry their distribution in their own row (<code>dist</code>, <code>p1</code>-<code>p4</code>), mixed freely with point values. <code><a href="reference/cm_template.html">cm_template()</a></code> writes example files, and <code>system.file("extdata", "five_diseases", package = "deconflate")</code> holds a five-disease example that uses every feature, with a script (<code>run_all_features.R</code>) that runs them all. In R: <code><a href="reference/cm_diseases.html">cm_diseases()</a></code>, <code><a href="reference/cm_associations.html">cm_associations()</a></code> (OR, RR, RD, conditional probability, phi), <code><a href="reference/cm_three_way.html">cm_three_way()</a></code>, <code><a href="reference/cm_population.html">cm_population()</a></code>, <code><a href="reference/cm_impacts.html">cm_impacts()</a></code>, <code><a href="reference/cm_interactions.html">cm_interactions()</a></code> and <code><a href="reference/cm_model.html">cm_model()</a></code>.</li>
+<strong>Inputs:</strong> <code><a href="reference/cm_read_inputs.html">cm_read_inputs()</a></code> reads CSV files or data frames (each table a named argument) and reports every problem at once (<code><a href="reference/cm_check_inputs.html">cm_check_inputs()</a></code>); uncertain values carry their distribution in their own row (<code>dist</code>, <code>p1</code>-<code>p4</code>), mixed freely with point values. <code><a href="reference/cm_template.html">cm_template()</a></code> writes example files, and <code>system.file("extdata", "five_diseases", package = "deconflate")</code> holds a five-disease example that uses every feature, with a script (<code>run_all_features.R</code>) that runs them all. In R: <code><a href="reference/cm_diseases.html">cm_diseases()</a></code>, <code><a href="reference/cm_associations.html">cm_associations()</a></code> (OR, RR, RD, phi, prevalence, OR ratio; about pairs, combinations and subgroups, crude or adjusted), <code><a href="reference/cm_population.html">cm_population()</a></code>, <code><a href="reference/cm_impacts.html">cm_impacts()</a></code> and <code><a href="reference/cm_model.html">cm_model()</a></code>.</li>
 <li>
-<strong>Adjustment:</strong> <code><a href="reference/deconflate.html">deconflate()</a></code> for additive and event impacts, with intervals (<code>n_draws</code>); <code><a href="reference/compare_methods.html">compare_methods()</a></code> (which also shows the published approximation, for comparison); contributions of each disease (closed-form Shapley values) in <code><a href="reference/attribute_burden.html">attribute_burden()</a></code> and <code><a href="reference/contribution_table.html">contribution_table()</a></code>; the attributable risk of event impacts.</li>
+<strong>Adjustment:</strong> <code><a href="reference/deconflate.html">deconflate()</a></code> for additive and event impacts, with interactions, several rows per item (pooling with random or fixed effects, weighted least squares; <code>$heterogeneity</code>), and intervals (<code>n_draws</code>); <code><a href="reference/compare_methods.html">compare_methods()</a></code> (which also shows the published approximation, for comparison); contributions of each disease (closed-form Shapley values) in <code><a href="reference/attribute_burden.html">attribute_burden()</a></code> and <code><a href="reference/contribution_table.html">contribution_table()</a></code>; the attributable risk of event impacts.</li>
 <li>
 <strong>Joint distribution and feasibility:</strong> <code><a href="reference/fit_joint.html">fit_joint()</a></code> (exact, or sampled for many diseases), <code><a href="reference/combination_probs.html">combination_probs()</a></code> and <code><a href="reference/check_feasibility.html">check_feasibility()</a></code>.</li>
 <li>

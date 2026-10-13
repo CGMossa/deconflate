@@ -12,8 +12,10 @@ association_to_joint(measure, value, p1, p2)
 
 - measure:
 
-  One of the measures in
-  [`cm_associations()`](https://rasmussenphilip.github.io/deconflate/reference/cm_associations.md).
+  `"OR"`, `"RR"`, `"RD"`, `"phi"` or `"prevalence"` (see
+  [`cm_associations()`](https://rasmussenphilip.github.io/deconflate/reference/cm_associations.md);
+  the directional measures treat disease 1 as the outcome and disease 2
+  as the comparison).
 
 - value:
 
@@ -21,7 +23,7 @@ association_to_joint(measure, value, p1, p2)
 
 - p1, p2:
 
-  Marginal probabilities of `disease1` and `disease2`.
+  Marginal probabilities of disease 1 and disease 2.
 
 ## Value
 

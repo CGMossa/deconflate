@@ -8,11 +8,9 @@ Combine a population with an impact table
 cm_model(
   population,
   impacts = NULL,
-  interactions = NULL,
   associations = NULL,
-  three_way = NULL,
-  adjusted_associations = c("error", "use_as_marginal"),
-  distributions = NULL
+  distributions = NULL,
+  ...
 )
 ```
 
@@ -24,22 +22,15 @@ cm_model(
   [`cm_population()`](https://rasmussenphilip.github.io/deconflate/reference/cm_population.md).
   For convenience, a
   [`cm_diseases()`](https://rasmussenphilip.github.io/deconflate/reference/cm_diseases.md)
-  object can be given instead, together with `associations` and
-  `three_way`.
+  object can be given instead, together with `associations`.
 
 - impacts:
 
   A
   [`cm_impacts()`](https://rasmussenphilip.github.io/deconflate/reference/cm_impacts.md)
-  object with one value per disease.
+  object.
 
-- interactions:
-
-  Optional
-  [`cm_interactions()`](https://rasmussenphilip.github.io/deconflate/reference/cm_interactions.md)
-  object (additive impacts only).
-
-- associations, three_way, adjusted_associations:
+- associations:
 
   Used only when `population` is a
   [`cm_diseases()`](https://rasmussenphilip.github.io/deconflate/reference/cm_diseases.md)
@@ -53,15 +44,19 @@ cm_model(
   for uncertain inputs, used when
   [`deconflate()`](https://rasmussenphilip.github.io/deconflate/reference/deconflate.md)
   runs draws. Names are keys: `"prob:<disease>"` (the disease's `value`,
-  on the scale it was entered), `"assoc:<d1>:<d2>"` (the association, on
-  its own measure), `"three:<d1>:<d2>:<d3>"`, `"impact:<disease>"` and
-  `"inter:<d1>:<d2>"`.
+  on the scale it was entered), `"associations:<row>"` and
+  `"impacts:<row>"` (a row of those tables, by its number in `row`). For
+  convenience, `"assoc:<d1>:<d2>"` names the crude row of a pair and
+  `"impact:<id>"` the row of a disease or combination, when there is
+  exactly one.
   [`cm_read_inputs()`](https://rasmussenphilip.github.io/deconflate/reference/cm_read_inputs.md)
-  fills this in from the `dist` columns of the tables;
-  [`cm_dist_table()`](https://rasmussenphilip.github.io/deconflate/reference/cm_dist_table.md)
-  builds it from a table of keys. When `population` is a model and
-  `distributions` is not given, its distributions are kept, except those
-  of impacts or interactions that are replaced.
+  fills this in from the `dist` columns of the tables. When `population`
+  is a model and `distributions` is not given, its distributions are
+  kept, except those of impacts that are replaced.
+
+- ...:
+
+  Not used (arguments of earlier versions give a message).
 
 ## Value
 
@@ -79,8 +74,9 @@ m <- cm_model(
 m
 #> <cm_model>
 #>   Diseases: 3 (d1, d2, d3)
-#>   Disease pairs: 3 (2 with an association, 1 unknown)
+#>   Association rows: 2 (OR: 2)
+#>   Disease pairs: 3 (2 with a crude pair row, 1 unknown)
 #>   Impacts: (unlabelled) [%] (additive)
-#>   Estimands: crude: 3
+#>   Impact rows: 3 (0 adjusted, 0 within subgroups)
 #>   Uncertain inputs (with a distribution): 1
 ```

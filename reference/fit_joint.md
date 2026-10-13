@@ -1,16 +1,12 @@
 # Fit the maximum-entropy distribution of disease combinations
 
-The global model needs the probability of every combination of diseases.
-Pairwise tables do not determine it (for three or more diseases there
-are 2^n - 1 free probabilities and n(n+1)/2 constraints), so the package
-uses the maximum-entropy distribution that matches the disease
-probabilities and every specified pairwise table: a log-linear model
-with main effects and the two-way terms of the constrained pairs, plus
-any three-way terms from
-[`cm_three_way()`](https://rasmussenphilip.github.io/deconflate/reference/cm_three_way.md).
-This is an assumption, not something the pairwise evidence identifies.
-Pairs without an association (unknown pairs) are not constrained: their
-association is whatever the maximum-entropy fit implies given the
+The model needs the probability of every combination of diseases. The
+association rows do not determine it (for three or more diseases there
+are 2^n - 1 free probabilities), so the package uses the maximum-entropy
+distribution that matches the disease probabilities and every
+association row: the distribution that assumes as little as possible
+beyond the inputs. Pairs that no row mentions (unknown pairs) are not
+constrained: their association is whatever the fit implies given the
 others. A pair given an odds ratio of 1 is constrained to be
 independent.
 
@@ -29,7 +25,8 @@ fit_joint(
   fit_iter = 300L,
   calibrate = TRUE,
   seed = NULL,
-  start = NULL
+  start = NULL,
+  pool = c("random", "fixed")
 )
 ```
 
@@ -44,12 +41,12 @@ fit_joint(
 
 - tol:
 
-  Convergence tolerance of the IPF: maximum absolute deviation of any
-  constrained cell probability, recomputed on the returned distribution.
+  Convergence tolerance: maximum absolute deviation of any event or
+  disease probability from its target.
 
 - max_iter:
 
-  Maximum number of full IPF sweeps.
+  Maximum number of full sweeps.
 
 - max_diseases:
 
@@ -88,11 +85,17 @@ fit_joint(
 
 - start:
 
-  Optional earlier exact fit to start the IPF from (e.g. the fit at the
-  central inputs, when refitting for a draw of the inputs). It is used
-  only when it has the same diseases, constrained pairs and three-way
-  terms; the result is then the same maximum-entropy distribution, found
-  in fewer sweeps.
+  Optional earlier exact fit to start from (e.g. the fit at the central
+  inputs, when refitting for a draw of the inputs). It is used only when
+  it has the same diseases and association rows (only their values may
+  differ); the result is then the same maximum-entropy distribution,
+  found in fewer sweeps.
+
+- pool:
+
+  `"random"` (default) or `"fixed"`: how several association rows about
+  the same quantity are pooled (see
+  [`deconflate()`](https://rasmussenphilip.github.io/deconflate/reference/deconflate.md)).
 
 ## Value
 
@@ -100,37 +103,46 @@ A `cm_joint` object: `cells` (0/1 matrix of combinations), `prob`
 (probability of each combination), `converged`, `iterations`,
 `max_residual`, `backend`, the `targets` it was fitted to (used by
 [`deconflate()`](https://rasmussenphilip.github.io/deconflate/reference/deconflate.md)
-to check that a supplied joint matches the model) and, for the sampled
-backend, `diagnostics`.
+to check that a supplied joint matches the model), the pooling of
+association rows (`pooling`) and, for the sampled backend,
+`diagnostics`.
+
+## Details
+
+Every association row fixes the probability of one event: for a pair
+row, the probability of both diseases; for a row within a subgroup, of
+both diseases within it; for a combination, of all its diseases together
+(see
+[`cm_associations()`](https://rasmussenphilip.github.io/deconflate/reference/cm_associations.md)).
+Several rows about the same event are pooled (see
+[`deconflate()`](https://rasmussenphilip.github.io/deconflate/reference/deconflate.md)).
+For rows whose event probability depends on other probabilities (e.g. an
+odds ratio within a subgroup, whose margins are themselves fitted), the
+targets are recomputed at the current fit until they no longer move.
 
 ## Exact backend
 
 `backend = "exact"` enumerates all 2^n combinations. Starting from
-independence (the product of marginal probabilities; slide 12 of the
-2023 seminar), with the three-way terms put into the starting
-distribution, iterative proportional fitting (IPF) rescales the
-combination probabilities until every pairwise table and marginal is
-matched. IPF keeps every log-linear term of its start that the
-constraints do not fix, so the result is the maximum-entropy
-distribution with the requested three-way terms. Enumeration limits this
-backend to about 20 diseases.
+independence (the product of the disease probabilities; slide 12 of the
+2023 seminar), iterative proportional fitting on events rescales the
+combination probabilities until every event probability and disease
+probability is matched. The result is the maximum-entropy distribution
+with those event probabilities. Enumeration limits this backend to about
+20 diseases.
 
 ## Sampled backend
 
-`backend = "sampled"` fits the same log-linear model without enumerating
-combinations, for larger numbers of diseases:
+`backend = "sampled"` fits the same model without enumerating
+combinations, for larger numbers of diseases, when every association row
+is a crude pair row:
 
 1.  Calibration: the model's parameters (a main effect per disease and
-    an interaction per constrained pair; three-way terms fixed at the
-    log of their ratios) are fitted by Monte Carlo moment matching.
-    Gibbs sampling from many parallel chains estimates the probabilities
-    and pairwise tables implied by the current parameters, and the
-    parameters are updated (by the differences in logits and log odds
-    ratios between the targets and the estimates) until the estimates
-    match the targets within Monte Carlo error. The interaction
-    parameters are conditional log odds ratios; they are not set equal
-    to the marginal log odds ratios of the inputs (those are only the
-    starting values).
+    an interaction per constrained pair) are fitted by Monte Carlo
+    moment matching. Gibbs sampling from many parallel chains estimates
+    the probabilities and pairwise tables implied by the current
+    parameters, and the parameters are updated (by the differences in
+    logits and log odds ratios between the targets and the estimates)
+    until the estimates match the targets within Monte Carlo error.
 
 2.  Sampling: `n_samples` combinations are drawn from the calibrated
     model.
@@ -142,17 +154,15 @@ combinations, for larger numbers of diseases:
     higher-order structure.
 
 The result has the same form as the exact one (`cells` are the distinct
-sampled combinations, `prob` their weights), so the global method,
-interaction offsets, Shapley allocation and the snapshot hazard model of
-event impacts work with it. Its `diagnostics` give the constraint
-residuals of the raw sample and after raking, R-hat and effective sample
-sizes of the fitted probabilities across chains, and the Monte Carlo
-errors. Results are approximations with Monte Carlo error: compare runs
-with different seeds, and with the exact backend where n allows.
+sampled combinations, `prob` their weights). Its `diagnostics` give the
+constraint residuals of the raw sample and after raking, R-hat and
+effective sample sizes across chains, and the Monte Carlo errors.
+Results have Monte Carlo error: compare runs with different seeds, and
+with the exact backend where n allows.
 
 ## Convergence
 
-If the pairwise tables are jointly infeasible, the exact IPF does not
+If the association rows cannot all hold together, the fit does not
 converge. Non-convergence after `max_iter` sweeps suggests, but does not
 prove, infeasibility (see
 [`check_feasibility()`](https://rasmussenphilip.github.io/deconflate/reference/check_feasibility.md)).
@@ -165,8 +175,8 @@ reported as unresolved, not as evidence that the inputs are infeasible.
 j <- fit_joint(example_supplement())
 j
 #> <cm_joint> 3 diseases, 8 combinations (exact backend)
-#>   Converged: TRUE after 8 sweeps (max residual 2.48e-11)
-#>   Constrained pairs: 3
+#>   Converged: TRUE after 28 sweeps (max residual 8.28e-12)
+#>   Association rows: 3
 # \donttest{
 js <- fit_joint(example_supplement(), backend = "sampled", n_samples = 20000, seed = 1)
 js$diagnostics$summary

@@ -23,7 +23,7 @@
     <li><a class="dropdown-item" href="../articles/thresholds-and-scaling.html">Threshold searches and many diseases</a></li>
     <li><a class="dropdown-item" href="../articles/event-impacts.html">Event impacts (culling and mortality)</a></li>
     <li><a class="dropdown-item" href="../articles/reproducing-published.html">Reproducing the published analyses</a></li>
-    <li><a class="dropdown-item" href="../articles/interactions.html">Disease combinations, interactions and attribution</a></li>
+    <li><a class="dropdown-item" href="../articles/interactions.html">Disease combinations, subgroups and interactions</a></li>
     <li><a class="dropdown-item" href="../articles/uncertainty.html">Uncertainty and sensitivity</a></li>
   </ul></li>
 <li class="nav-item"><a class="nav-link" href="../news/index.html">Changelog</a></li>
@@ -65,8 +65,7 @@
     <p>An n x n matrix <code>E</code> with <code>E[k, i] = P(k | i) - P(k | not i)</code>, the
 excess probability of disease <code>k</code> among animals with disease <code>i</code>
 (<code>ep_ki</code> in Rasmussen et al. 2022, eq. 14). The diagonal is 0. Errors if
-any pair is unknown (has no association): pairwise tables need every
-pair.</p>
+any pair has no crude pair row: pairwise tables need every pair.</p>
     </div>
 
   </main><aside class="col-md-3"><nav id="toc" aria-label="Table of contents"><h2>On this page</h2>

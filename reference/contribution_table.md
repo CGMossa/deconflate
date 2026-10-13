@@ -1,8 +1,10 @@
 # Contribution table
 
-One row per disease with the raw estimate, the adjusted value and the
-disease's contribution to the total, with 95% intervals when the result
-has draws.
+One row per disease with the raw estimate (of its row, when it has
+exactly one), the adjusted value and the disease's contribution to the
+total, with 95% intervals when the result has draws. Interactions are in
+the result's `adjusted` table; their contributions are shared among
+their diseases here.
 
 ## Usage
 

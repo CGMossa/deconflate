@@ -30,7 +30,7 @@ Optional packages (`Suggests`):
 
 | Package | Used for |
 |----|----|
-| `lpSolve` | The exact feasibility check (`check_feasibility(method = "lp")`, `deconflate(feasibility = "lp")`). Without it, the triple screen is used. |
+| `lpSolve` | The exact feasibility check of the pairwise tables (`check_feasibility(method = "lp")`). Without it, the triple screen is used. |
 | `knitr`, `rmarkdown` | Building the vignettes. |
 | `testthat` (\>= 3.0.0) | Running the tests. |
 | `remotes` | Installing from GitHub (see above). |
@@ -43,31 +43,39 @@ package.
 
 ## How it works
 
-A model has the disease probabilities, their pairwise associations and
+A model has three tables: the diseases, the association estimates and
 **one** table of impact estimates. You give each table as a CSV file
 (with any name) or a data frame, and adjust one impact table per call;
 for several outcomes, repeat the call. The package assumes no species,
 outcome or unit.
 
+Every association and impact row has the same core columns: `disease`,
+`among` (a subgroup), `adjusted_for`, `measure` and `value`. A row can
+be about one disease or a combination (`"MAS;SCK"`), hold in the whole
+population or within a subgroup (`"SCK"`, `"no SCK"`, `"no others"`),
+and be crude or adjusted for other diseases; several rows can describe
+the same thing (several studies), and are pooled or fitted together.
+
 - **Additive impacts** (the default) are in any units (kg of milk,
   percent of yield, days, euros, welfare scores), the same for every
-  row; results come back in those units. Each estimate declares its
-  estimand: a crude comparison (`"crude"`) or the coefficient of an
-  additive regression adjusted for named diseases (`"adjusted_linear"`).
-  Pairwise interactions can be added.
+  row; results come back in those units. A row about a combination adds
+  an interaction.
 - **Event impacts** (`event_model = TRUE`, with `overall_risk`) are
   hazard ratios, rate ratios, risk ratios, odds ratios or risk
   differences of an event such as culling or death, which can be mixed.
   They are adjusted with the snapshot hazard model, and the result
   includes the risk attributable to disease, split by disease.
 
-`method = "auto"` (the default) uses the simultaneous method (the exact
-solution of `raw = A b` from the pairwise 2×2 tables) when every pair
-has an association and there are no interactions or three-way terms;
-otherwise it uses the global method (the maximum-entropy distribution of
-disease combinations), with a note saying why. Pairs without an
-association are unknown and are filled in by the global fit; an odds
-ratio of 1 states that two diseases are unrelated.
+There is one model: the maximum-entropy distribution of disease
+combinations that matches every association row, and the impacts (and
+interactions) that reproduce every impact row. Pairs without an
+association are unknown and are filled in by the fit; an odds ratio of 1
+states that two diseases are unrelated. When the pairwise 2×2 tables
+give the same answer (additive impacts, crude pair rows for every pair
+and nothing else, impact rows about single diseases in the whole
+population),
+[`deconflate()`](https://rasmussenphilip.github.io/deconflate/reference/deconflate.md)
+uses them directly.
 
 Inputs can carry distributions;
 [`deconflate()`](https://rasmussenphilip.github.io/deconflate/reference/deconflate.md)
@@ -133,16 +141,17 @@ reproduce_rasmussen_2022()
   (`run_all_features.R`) that runs them all. In R:
   [`cm_diseases()`](https://rasmussenphilip.github.io/deconflate/reference/cm_diseases.md),
   [`cm_associations()`](https://rasmussenphilip.github.io/deconflate/reference/cm_associations.md)
-  (OR, RR, RD, conditional probability, phi),
-  [`cm_three_way()`](https://rasmussenphilip.github.io/deconflate/reference/cm_three_way.md),
+  (OR, RR, RD, phi, prevalence, OR ratio; about pairs, combinations and
+  subgroups, crude or adjusted),
   [`cm_population()`](https://rasmussenphilip.github.io/deconflate/reference/cm_population.md),
-  [`cm_impacts()`](https://rasmussenphilip.github.io/deconflate/reference/cm_impacts.md),
-  [`cm_interactions()`](https://rasmussenphilip.github.io/deconflate/reference/cm_interactions.md)
+  [`cm_impacts()`](https://rasmussenphilip.github.io/deconflate/reference/cm_impacts.md)
   and
   [`cm_model()`](https://rasmussenphilip.github.io/deconflate/reference/cm_model.md).
 - **Adjustment:**
   [`deconflate()`](https://rasmussenphilip.github.io/deconflate/reference/deconflate.md)
-  for additive and event impacts, with intervals (`n_draws`);
+  for additive and event impacts, with interactions, several rows per
+  item (pooling with random or fixed effects, weighted least squares;
+  `$heterogeneity`), and intervals (`n_draws`);
   [`compare_methods()`](https://rasmussenphilip.github.io/deconflate/reference/compare_methods.md)
   (which also shows the published approximation, for comparison);
   contributions of each disease (closed-form Shapley values) in

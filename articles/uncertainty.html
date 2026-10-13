@@ -38,7 +38,7 @@
     <li><a class="dropdown-item" href="../articles/thresholds-and-scaling.html">Threshold searches and many diseases</a></li>
     <li><a class="dropdown-item" href="../articles/event-impacts.html">Event impacts (culling and mortality)</a></li>
     <li><a class="dropdown-item" href="../articles/reproducing-published.html">Reproducing the published analyses</a></li>
-    <li><a class="dropdown-item" href="../articles/interactions.html">Disease combinations, interactions and attribution</a></li>
+    <li><a class="dropdown-item" href="../articles/interactions.html">Disease combinations, subgroups and interactions</a></li>
     <li><a class="dropdown-item" href="../articles/uncertainty.html">Uncertainty and sensitivity</a></li>
   </ul>
 </li>
@@ -73,8 +73,8 @@
     
 <div class="sourceCode" id="cb1"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="kw"><a href="https://rdrr.io/r/base/library.html" class="external-link">library</a></span><span class="op">(</span><span class="va"><a href="https://github.com/rasmussenphilip/deconflate" class="external-link">deconflate</a></span><span class="op">)</span></span></code></pre></div>
-<p>Any input can be uncertain: a disease probability, an association, a
-three-way term, an impact, an interaction, and, for event impacts, the
+<p>Any input can be uncertain: a disease probability, an association
+row, an impact row (including interactions), and, for event impacts, the
 overall risk. <code><a href="../reference/deconflate.html">deconflate()</a></code> draws the uncertain inputs from
 their distributions, adjusts each draw in the same way as the central
 estimate, and reports intervals. Monte Carlo runs are part of
@@ -107,11 +107,15 @@ row, in the columns <code>dist</code> and
 it in the model (see <code><a href="../articles/own-data.html">vignette("own-data")</a></code>). In R, give them
 to <code><a href="../reference/cm_model.html">cm_model()</a></code> as <code>distributions</code>, a named list
 whose names are keys: <code>prob:&lt;disease&gt;</code>,
-<code>assoc:&lt;d1&gt;:&lt;d2&gt;</code>,
-<code>three:&lt;d1&gt;:&lt;d2&gt;:&lt;d3&gt;</code>,
-<code>impact:&lt;disease&gt;</code> and
-<code>inter:&lt;d1&gt;:&lt;d2&gt;</code>. Inputs without a distribution
-keep their point value in every draw.</p>
+<code>associations:&lt;row&gt;</code> and
+<code>impacts:&lt;row&gt;</code> (rows numbered from 1 in each table).
+Shorter keys name the usual rows:
+<code>assoc:&lt;d1&gt;:&lt;d2&gt;</code> (a pair’s crude row),
+<code>impact:&lt;disease&gt;</code> (a disease’s row),
+<code>inter:&lt;d1&gt;:&lt;d2&gt;</code> (an interaction adjusted for
+all) and <code>three:&lt;d1&gt;:&lt;d2&gt;:&lt;d3&gt;</code> (an
+<code>OR_ratio</code> row). Inputs without a distribution keep their
+point value in every draw.</p>
 <div class="sourceCode" id="cb3"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">m</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/example_supplement.html">example_supplement</a></span><span class="op">(</span><span class="op">)</span></span>
 <span><span class="va">mu</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/cm_model.html">cm_model</a></span><span class="op">(</span><span class="va">m</span>, <span class="va">m</span><span class="op">$</span><span class="va">impacts</span>, distributions <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span></span>
@@ -124,9 +128,10 @@ keep their point value in every draw.</p>
 <span><span class="va">mu</span></span>
 <span><span class="co">#&gt; &lt;cm_model&gt;</span></span>
 <span><span class="co">#&gt;   Diseases: 3 (d1, d2, d3)</span></span>
-<span><span class="co">#&gt;   Disease pairs: 3 (3 with an association, 0 unknown)</span></span>
+<span><span class="co">#&gt;   Association rows: 3 (OR: 3)</span></span>
+<span><span class="co">#&gt;   Disease pairs: 3 (3 with a crude pair row, 0 unknown)</span></span>
 <span><span class="co">#&gt;   Impacts: yield [%] (additive)</span></span>
-<span><span class="co">#&gt;   Estimands: crude: 3</span></span>
+<span><span class="co">#&gt;   Impact rows: 3 (0 adjusted, 0 within subgroups)</span></span>
 <span><span class="co">#&gt;   Uncertain inputs (with a distribution): 5</span></span></code></pre></div>
 </div>
 <div class="section level2">
@@ -140,7 +145,7 @@ jointly:</p>
 <div class="sourceCode" id="cb4"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">r</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/deconflate.html">deconflate</a></span><span class="op">(</span><span class="va">mu</span>, n_draws <span class="op">=</span> <span class="fl">200</span>, seed <span class="op">=</span> <span class="fl">1</span><span class="op">)</span></span>
 <span><span class="va">r</span></span>
-<span><span class="co">#&gt; &lt;cm_result&gt; method: simultaneous; yield [%]</span></span>
+<span><span class="co">#&gt; &lt;cm_result&gt; pairwise shortcut; yield [%]</span></span>
 <span><span class="co">#&gt; </span></span>
 <span><span class="co">#&gt;  disease raw adjusted  lower upper   change</span></span>
 <span><span class="co">#&gt;       d1 2.5    2.143 0.9455 3.134 -0.14270</span></span>
@@ -148,7 +153,7 @@ jointly:</p>
 <span><span class="co">#&gt;       d3 7.5    6.934 5.0366 8.176 -0.07544</span></span>
 <span><span class="co">#&gt; </span></span>
 <span><span class="co">#&gt; Raw sum: 2.5; adjusted total: 2.109 (95% interval 1.668 to 2.454)</span></span>
-<span><span class="co">#&gt; Diagnostics: residual 8.88e-16, condition number 1.53, sign changes 0</span></span>
+<span><span class="co">#&gt; Diagnostics: residual 0.00e+00, condition number 1.53, sign changes 0</span></span>
 <span><span class="co">#&gt; Uncertainty: 95% intervals from 200 draws (0 rejected; random sampling; seed 1).</span></span></code></pre></div>
 <p>The central estimate (<code>adjusted</code>) always uses the point
 values; the draws give the 95% intervals (<code>lower</code>,
@@ -232,7 +237,7 @@ reaches below zero:</p>
 <code class="sourceCode R"><span><span class="va">m_rej</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/cm_model.html">cm_model</a></span><span class="op">(</span><span class="va">m</span>, <span class="va">m</span><span class="op">$</span><span class="va">impacts</span>, distributions <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span><span class="st">"prob:d1"</span> <span class="op">=</span> <span class="fu"><a href="../reference/distributions.html">dist_normal</a></span><span class="op">(</span><span class="fl">0.05</span>, <span class="fl">0.05</span><span class="op">)</span><span class="op">)</span><span class="op">)</span></span>
 <span><span class="va">r_rej</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/deconflate.html">deconflate</a></span><span class="op">(</span><span class="va">m_rej</span>, n_draws <span class="op">=</span> <span class="fl">200</span>, seed <span class="op">=</span> <span class="fl">1</span><span class="op">)</span></span>
 <span><span class="va">r_rej</span></span>
-<span><span class="co">#&gt; &lt;cm_result&gt; method: simultaneous; yield [%]</span></span>
+<span><span class="co">#&gt; &lt;cm_result&gt; pairwise shortcut; yield [%]</span></span>
 <span><span class="co">#&gt; </span></span>
 <span><span class="co">#&gt;  disease raw adjusted lower upper   change</span></span>
 <span><span class="co">#&gt;       d1 2.5    2.143 2.108 2.159 -0.14270</span></span>
@@ -276,7 +281,7 @@ impacts change sign):</p>
 <span><span class="co">#&gt; infeasible </span></span>
 <span><span class="co">#&gt;         15</span></span>
 <span><span class="va">r_strong</span><span class="op">$</span><span class="va">draws</span><span class="op">$</span><span class="va">rejections</span><span class="op">$</span><span class="va">reason</span><span class="op">[</span><span class="fl">1</span><span class="op">]</span></span>
-<span><span class="co">#&gt; [1] "The pairwise associations are jointly infeasible: no population has all of them (conflicting triples: a-b-c). See check_feasibility()."</span></span></code></pre></div>
+<span><span class="co">#&gt; [1] "The associations cannot all hold together: no population has all of them (conflicting triples: a-b-c). See check_feasibility()."</span></span></code></pre></div>
 <p>Report the rejection share: conditioning on acceptance changes the
 effective input distribution. A high share means the input distributions
 often combine values that contradict each other; narrower or correlated
@@ -294,7 +299,7 @@ means. Compare <code>mcse</code> with the random draws above:</p>
 <div class="sourceCode" id="cb11"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">r_lhs</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/deconflate.html">deconflate</a></span><span class="op">(</span><span class="va">mu</span>, n_draws <span class="op">=</span> <span class="fl">200</span>, seed <span class="op">=</span> <span class="fl">1</span>, sampling <span class="op">=</span> <span class="st">"lhs"</span><span class="op">)</span></span>
 <span><span class="va">r_lhs</span></span>
-<span><span class="co">#&gt; &lt;cm_result&gt; method: simultaneous; yield [%]</span></span>
+<span><span class="co">#&gt; &lt;cm_result&gt; pairwise shortcut; yield [%]</span></span>
 <span><span class="co">#&gt; </span></span>
 <span><span class="co">#&gt;  disease raw adjusted lower upper   change</span></span>
 <span><span class="co">#&gt;       d1 2.5    2.143 1.168 3.137 -0.14270</span></span>
@@ -302,7 +307,7 @@ means. Compare <code>mcse</code> with the random draws above:</p>
 <span><span class="co">#&gt;       d3 7.5    6.934 5.168 8.360 -0.07544</span></span>
 <span><span class="co">#&gt; </span></span>
 <span><span class="co">#&gt; Raw sum: 2.5; adjusted total: 2.109 (95% interval 1.658 to 2.39)</span></span>
-<span><span class="co">#&gt; Diagnostics: residual 8.88e-16, condition number 1.53, sign changes 0</span></span>
+<span><span class="co">#&gt; Diagnostics: residual 0.00e+00, condition number 1.53, sign changes 0</span></span>
 <span><span class="co">#&gt; Uncertainty: 95% intervals from 200 draws (0 rejected; Latin hypercube sampling; seed 1).</span></span>
 <span><span class="fu"><a href="https://rdrr.io/r/base/data.frame.html" class="external-link">data.frame</a></span><span class="op">(</span>quantity <span class="op">=</span> <span class="va">r</span><span class="op">$</span><span class="va">draws</span><span class="op">$</span><span class="va">summary</span><span class="op">$</span><span class="va">quantity</span>,</span>
 <span>           mcse_random <span class="op">=</span> <span class="va">r</span><span class="op">$</span><span class="va">draws</span><span class="op">$</span><span class="va">summary</span><span class="op">$</span><span class="va">mcse</span>,</span>
@@ -319,20 +324,54 @@ means. Compare <code>mcse</code> with the random draws above:</p>
 </div>
 </div>
 <div class="section level2">
+<h2 id="several-rows-for-one-item">Several rows for one item<a class="anchor" aria-label="anchor" href="#several-rows-for-one-item"></a>
+</h2>
+<p>When several association rows are pooled (see
+<code><a href="../articles/interactions.html">vignette("interactions")</a></code>), each draw draws every row from
+its own distribution and pools the drawn values with the weights of the
+central estimate. With random effects (the default), the draw also adds
+the between-study spread: a standard normal draw times tau, on the log
+scale, listed among the drawn inputs as
+<code>between:associations:&lt;rows&gt;</code>. Impact rows that
+over-determine the impacts are fitted in each draw by weighted least
+squares, with the weights of the central estimate. Here two studies of
+the d1:d2 odds ratio disagree (I^2 above 90%):</p>
+<div class="sourceCode" id="cb12"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="va">a2</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/cm_associations.html">cm_associations</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"d1"</span>, <span class="st">"d1"</span>, <span class="st">"d1"</span>, <span class="st">"d2"</span><span class="op">)</span>, <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"d2"</span>, <span class="st">"d2"</span>, <span class="st">"d3"</span>, <span class="st">"d3"</span><span class="op">)</span>, <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="fl">1.8</span>, <span class="fl">4</span>, <span class="fl">1</span>, <span class="fl">3</span><span class="op">)</span><span class="op">)</span></span>
+<span><span class="va">m2</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/cm_model.html">cm_model</a></span><span class="op">(</span><span class="va">m</span><span class="op">$</span><span class="va">diseases</span>, <span class="va">m</span><span class="op">$</span><span class="va">impacts</span>, associations <span class="op">=</span> <span class="va">a2</span>,</span>
+<span>               distributions <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span><span class="st">"associations:1"</span> <span class="op">=</span> <span class="fu"><a href="../reference/distributions.html">dist_lognormal_ci</a></span><span class="op">(</span><span class="fl">1.8</span>, <span class="fl">1.3</span>, <span class="fl">2.5</span><span class="op">)</span>,</span>
+<span>                                    <span class="st">"associations:2"</span> <span class="op">=</span> <span class="fu"><a href="../reference/distributions.html">dist_lognormal_ci</a></span><span class="op">(</span><span class="fl">4</span>, <span class="fl">3.4</span>, <span class="fl">4.7</span><span class="op">)</span><span class="op">)</span><span class="op">)</span></span>
+<span><span class="va">r2</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/deconflate.html">deconflate</a></span><span class="op">(</span><span class="va">m2</span>, n_draws <span class="op">=</span> <span class="fl">200</span>, seed <span class="op">=</span> <span class="fl">1</span><span class="op">)</span></span>
+<span><span class="va">r2</span><span class="op">$</span><span class="va">heterogeneity</span></span>
+<span><span class="co">#&gt;          table    item rows k          scale   pooled method        Q df</span></span>
+<span><span class="co">#&gt; 1 associations d1 ~ d2 1, 2 2 log odds ratio 2.718809 random 18.40048  1</span></span>
+<span><span class="co">#&gt;             p        I2      tau2</span></span>
+<span><span class="co">#&gt; 1 1.79013e-05 0.9456536 0.3014812</span></span>
+<span><span class="fu"><a href="https://rdrr.io/r/base/grep.html" class="external-link">grep</a></span><span class="op">(</span><span class="st">"between"</span>, <span class="fu"><a href="https://rdrr.io/r/base/names.html" class="external-link">names</a></span><span class="op">(</span><span class="va">r2</span><span class="op">$</span><span class="va">draws</span><span class="op">$</span><span class="va">specs</span><span class="op">)</span>, value <span class="op">=</span> <span class="cn">TRUE</span><span class="op">)</span></span>
+<span><span class="co">#&gt; [1] "between:associations:1,2"</span></span>
+<span><span class="va">r2_fixed</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/deconflate.html">deconflate</a></span><span class="op">(</span><span class="va">m2</span>, n_draws <span class="op">=</span> <span class="fl">200</span>, seed <span class="op">=</span> <span class="fl">1</span>, pool <span class="op">=</span> <span class="st">"fixed"</span><span class="op">)</span></span>
+<span><span class="fu"><a href="https://rdrr.io/r/base/cbind.html" class="external-link">rbind</a></span><span class="op">(</span>random <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/unlist.html" class="external-link">unlist</a></span><span class="op">(</span><span class="va">r2</span><span class="op">$</span><span class="va">totals</span><span class="op">[</span><span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"adjusted_total"</span>, <span class="st">"adjusted_total_lower"</span>, <span class="st">"adjusted_total_upper"</span><span class="op">)</span><span class="op">]</span><span class="op">)</span>,</span>
+<span>      fixed <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/unlist.html" class="external-link">unlist</a></span><span class="op">(</span><span class="va">r2_fixed</span><span class="op">$</span><span class="va">totals</span><span class="op">[</span><span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"adjusted_total"</span>, <span class="st">"adjusted_total_lower"</span>, <span class="st">"adjusted_total_upper"</span><span class="op">)</span><span class="op">]</span><span class="op">)</span><span class="op">)</span></span>
+<span><span class="co">#&gt;        adjusted_total adjusted_total_lower adjusted_total_upper</span></span>
+<span><span class="co">#&gt; random       2.083284             2.020904             2.154693</span></span>
+<span><span class="co">#&gt; fixed        2.064029             2.051997             2.074198</span></span></code></pre></div>
+<p>The fixed-effect interval is narrower: it treats the two studies as
+estimates of one value, which their disagreement contradicts.</p>
+</div>
+<div class="section level2">
 <h2 id="event-impacts-the-overall-risk">Event impacts: the overall risk<a class="anchor" aria-label="anchor" href="#event-impacts-the-overall-risk"></a>
 </h2>
 <p>For event impacts (<code><a href="../articles/event-impacts.html">vignette("event-impacts")</a></code>), the
 impacts can have distributions like any other input, and
 <code>overall_risk</code> can be a distribution too. The central
 estimate uses the mean of that distribution:</p>
-<div class="sourceCode" id="cb12"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb13"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">cull</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/cm_model.html">cm_model</a></span><span class="op">(</span><span class="va">m</span>, <span class="fu"><a href="../reference/cm_impacts.html">cm_impacts</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"d1"</span>, <span class="st">"d2"</span>, <span class="st">"d3"</span><span class="op">)</span>, <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="fl">1.5</span>, <span class="fl">2.0</span>, <span class="fl">1.2</span><span class="op">)</span>,</span>
-<span>                               measure <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"HR"</span>, <span class="st">"HR"</span>, <span class="st">"RR"</span><span class="op">)</span>,</span>
-<span>                               estimand <span class="op">=</span> <span class="st">"snapshot_crude"</span>, label <span class="op">=</span> <span class="st">"culling"</span><span class="op">)</span><span class="op">)</span></span>
+<span>                               measure <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"HR"</span>, <span class="st">"HR"</span>, <span class="st">"RR"</span><span class="op">)</span>, label <span class="op">=</span> <span class="st">"culling"</span><span class="op">)</span><span class="op">)</span></span>
 <span><span class="va">e</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/deconflate.html">deconflate</a></span><span class="op">(</span><span class="va">cull</span>, event_model <span class="op">=</span> <span class="cn">TRUE</span>, overall_risk <span class="op">=</span> <span class="fu"><a href="../reference/distributions.html">dist_beta</a></span><span class="op">(</span><span class="fl">250</span>, <span class="fl">750</span><span class="op">)</span>,</span>
 <span>                n_draws <span class="op">=</span> <span class="fl">200</span>, seed <span class="op">=</span> <span class="fl">1</span><span class="op">)</span></span>
 <span><span class="va">e</span></span>
-<span><span class="co">#&gt; &lt;cm_event_result&gt; culling; method: snapshot</span></span>
+<span><span class="co">#&gt; &lt;cm_event_result&gt; culling; snapshot</span></span>
 <span><span class="co">#&gt; </span></span>
 <span><span class="co">#&gt;  disease measure raw adjusted_hr lower upper</span></span>
 <span><span class="co">#&gt;       d1      HR 1.5       1.382 1.382 1.382</span></span>
@@ -347,13 +386,13 @@ estimate uses the mean of that distribution:</p>
 <span><span class="co">#&gt;       d2     0.023888 0.6780 0.022378 0.025504</span></span>
 <span><span class="co">#&gt;       d3     0.003981 0.1130 0.003517 0.004549</span></span>
 <span><span class="co">#&gt; </span></span>
-<span><span class="co">#&gt; Diagnostics: residual 5.27e-16, condition number 1.72, sign changes 0</span></span>
+<span><span class="co">#&gt; Diagnostics: residual 6.76e-12, condition number 1.72, sign changes 0</span></span>
 <span><span class="co">#&gt; Uncertainty: 95% intervals from 200 draws (0 rejected; random sampling; seed 1).</span></span>
 <span><span class="va">e</span><span class="op">$</span><span class="va">attributable</span><span class="op">$</span><span class="va">summary</span></span>
-<span><span class="co">#&gt;   overall_risk disease_free_risk attributable attributable_fraction unallocated</span></span>
-<span><span class="co">#&gt; 1         0.25         0.2147648   0.03523521             0.1409408           0</span></span>
-<span><span class="co">#&gt;   attributable_lower attributable_upper</span></span>
-<span><span class="co">#&gt; 1         0.03276159         0.03796451</span></span></code></pre></div>
+<span><span class="co">#&gt;   overall_risk disease_free_risk attributable attributable_fraction</span></span>
+<span><span class="co">#&gt; 1         0.25         0.2147648   0.03523521             0.1409408</span></span>
+<span><span class="co">#&gt;    unallocated attributable_lower attributable_upper</span></span>
+<span><span class="co">#&gt; 1 1.734723e-16         0.03276159         0.03796451</span></span></code></pre></div>
 <p>Here only the overall risk is uncertain. The attributable risk and
 its allocation to diseases vary with it, while the adjusted hazard
 ratios hardly change: raw hazard ratios do not depend on the overall
@@ -366,40 +405,39 @@ risk, and only the risk ratio of d3 does.</p>
 inputs, including the approximation of Rasmussen et al. (2022, eq. 16)
 (<code>"published"</code>), kept for comparison with earlier analyses
 only. With <code>n_draws</code> (default 0), every method is applied to
-the same draws; a draw is rejected if any method fails on it. There is
-no automatic switch of method here: methods that cannot be run are
-listed in <code>$failed</code>.</p>
-<div class="sourceCode" id="cb13"><pre class="downlit sourceCode r">
+the same draws; a draw is rejected if any method fails on it. Methods
+that cannot be run are listed in <code>$failed</code>.</p>
+<div class="sourceCode" id="cb14"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">mu2</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/cm_model.html">cm_model</a></span><span class="op">(</span><span class="va">m</span>, <span class="va">m</span><span class="op">$</span><span class="va">impacts</span>, distributions <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span></span>
 <span>  <span class="st">"assoc:d1:d2"</span> <span class="op">=</span> <span class="fu"><a href="../reference/distributions.html">dist_lognormal_ci</a></span><span class="op">(</span><span class="fl">2</span>, <span class="fl">1.4</span>, <span class="fl">2.9</span><span class="op">)</span>,</span>
 <span>  <span class="st">"impact:d2"</span> <span class="op">=</span> <span class="fu"><a href="../reference/distributions.html">dist_normal</a></span><span class="op">(</span><span class="fl">5</span>, <span class="fl">1</span><span class="op">)</span></span>
 <span><span class="op">)</span><span class="op">)</span></span>
-<span><span class="va">cmp</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/compare_methods.html">compare_methods</a></span><span class="op">(</span><span class="va">mu2</span>, methods <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"published"</span>, <span class="st">"simultaneous"</span><span class="op">)</span>, n_draws <span class="op">=</span> <span class="fl">200</span>, seed <span class="op">=</span> <span class="fl">1</span><span class="op">)</span></span>
+<span><span class="va">cmp</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/compare_methods.html">compare_methods</a></span><span class="op">(</span><span class="va">mu2</span>, n_draws <span class="op">=</span> <span class="fl">200</span>, seed <span class="op">=</span> <span class="fl">1</span><span class="op">)</span></span>
 <span><span class="va">cmp</span></span>
-<span><span class="co">#&gt; &lt;cm_comparison&gt; methods: published, simultaneous</span></span>
+<span><span class="co">#&gt; &lt;cm_comparison&gt; methods: published, deconflate</span></span>
 <span><span class="co">#&gt; Impacts: yield</span></span>
 <span><span class="co">#&gt; Units: %</span></span>
 <span><span class="co">#&gt; </span></span>
 <span><span class="co">#&gt; Adjusted values:</span></span>
-<span><span class="co">#&gt;  disease raw published simultaneous</span></span>
-<span><span class="co">#&gt;       d1 2.5      2.07         2.14</span></span>
-<span><span class="co">#&gt;       d2 5.0      3.70         3.39</span></span>
-<span><span class="co">#&gt;       d3 7.5      6.75         6.93</span></span>
+<span><span class="co">#&gt;  disease raw published deconflate</span></span>
+<span><span class="co">#&gt;       d1 2.5      2.07       2.14</span></span>
+<span><span class="co">#&gt;       d2 5.0      3.70       3.39</span></span>
+<span><span class="co">#&gt;       d3 7.5      6.75       6.93</span></span>
 <span><span class="co">#&gt; </span></span>
 <span><span class="co">#&gt; Totals:</span></span>
-<span><span class="co">#&gt;        method raw_sum adjusted_total</span></span>
-<span><span class="co">#&gt;     published     2.5          2.111</span></span>
-<span><span class="co">#&gt;  simultaneous     2.5          2.109</span></span>
+<span><span class="co">#&gt;      method raw_sum adjusted_total</span></span>
+<span><span class="co">#&gt;   published     2.5          2.111</span></span>
+<span><span class="co">#&gt;  deconflate     2.5          2.109</span></span>
 <span><span class="co">#&gt; </span></span>
 <span><span class="co">#&gt; Uncertainty (200 draws, 0 rejected): mean and 95% interval of the total</span></span>
-<span><span class="co">#&gt;        method  mean lower upper stability</span></span>
-<span><span class="co">#&gt;     published 2.107 1.945 2.333        ok</span></span>
-<span><span class="co">#&gt;  simultaneous 2.102 1.928 2.333        ok</span></span>
+<span><span class="co">#&gt;      method  mean lower upper stability</span></span>
+<span><span class="co">#&gt;   published 2.107 1.945 2.333        ok</span></span>
+<span><span class="co">#&gt;  deconflate 2.102 1.928 2.333        ok</span></span>
 <span><span class="va">s</span> <span class="op">&lt;-</span> <span class="va">cmp</span><span class="op">$</span><span class="va">draws</span><span class="op">$</span><span class="va">summary</span></span>
 <span><span class="va">s</span><span class="op">[</span><span class="va">s</span><span class="op">$</span><span class="va">quantity</span> <span class="op">==</span> <span class="st">"adjusted:d2"</span>, <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"method"</span>, <span class="st">"mean"</span>, <span class="st">"lower"</span>, <span class="st">"upper"</span><span class="op">)</span><span class="op">]</span></span>
-<span><span class="co">#&gt;          method     mean    lower    upper</span></span>
-<span><span class="co">#&gt; 2     published 3.658327 2.303267 5.664957</span></span>
-<span><span class="co">#&gt; 10 simultaneous 3.332220 1.759484 5.555188</span></span></code></pre></div>
+<span><span class="co">#&gt;        method     mean    lower    upper</span></span>
+<span><span class="co">#&gt; 2   published 3.658327 2.303267 5.664957</span></span>
+<span><span class="co">#&gt; 10 deconflate 3.332220 1.759484 5.555188</span></span></code></pre></div>
 </div>
 <div class="section level2">
 <h2 id="gaps-and-values-over-the-draws">Gaps and values over the draws<a class="anchor" aria-label="anchor" href="#gaps-and-values-over-the-draws"></a>
@@ -409,7 +447,7 @@ draw is computed in base R from the accepted draws in
 <code>$draws$values</code> (one row per draw, one column per quantity).
 Here the impacts are percent losses of an observed level of 10,000
 units, and the value of a unit is drawn per draw:</p>
-<div class="sourceCode" id="cb14"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb15"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">total</span> <span class="op">&lt;-</span> <span class="va">r</span><span class="op">$</span><span class="va">draws</span><span class="op">$</span><span class="va">values</span><span class="op">[</span>, <span class="st">"total"</span><span class="op">]</span></span>
 <span><span class="va">gap</span> <span class="op">&lt;-</span> <span class="fl">10000</span> <span class="op">/</span> <span class="op">(</span><span class="fl">1</span> <span class="op">-</span> <span class="va">total</span> <span class="op">/</span> <span class="fl">100</span><span class="op">)</span> <span class="op">-</span> <span class="fl">10000</span></span>
 <span><span class="fu"><a href="https://rdrr.io/r/base/Random.html" class="external-link">set.seed</a></span><span class="op">(</span><span class="fl">5</span><span class="op">)</span></span>
@@ -421,7 +459,7 @@ units, and the value of a unit is drawn per draw:</p>
 <span><span class="co">#&gt; 2.5%  173.6852 50.78312</span></span>
 <span><span class="co">#&gt; 97.5% 251.5701 81.64235</span></span></code></pre></div>
 <p>The central gap uses the central total:</p>
-<div class="sourceCode" id="cb15"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb16"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="fl">10000</span> <span class="op">/</span> <span class="op">(</span><span class="fl">1</span> <span class="op">-</span> <span class="va">r</span><span class="op">$</span><span class="va">totals</span><span class="op">$</span><span class="va">adjusted_total</span> <span class="op">/</span> <span class="fl">100</span><span class="op">)</span> <span class="op">-</span> <span class="fl">10000</span></span>
 <span><span class="co">#&gt; [1] 215.4676</span></span></code></pre></div>
 </div>
@@ -429,26 +467,26 @@ units, and the value of a unit is drawn per draw:</p>
 <h2 id="sensitivity">Sensitivity<a class="anchor" aria-label="anchor" href="#sensitivity"></a>
 </h2>
 <p>The sensitivity tools give point estimates (they do not run draws),
-and choose the method as <code><a href="../reference/deconflate.html">deconflate()</a></code> does. They also
+and adjust each scenario as <code><a href="../reference/deconflate.html">deconflate()</a></code> does. They also
 accept <code>event_model = TRUE</code> with <code>overall_risk</code>.
 One-at-a-time sensitivity (as in Rasmussen et al. 2024, Fig. 7):</p>
-<div class="sourceCode" id="cb16"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb17"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="fu"><a href="../reference/sensitivity_oat.html">sensitivity_oat</a></span><span class="op">(</span><span class="fu"><a href="../reference/example_supplement.html">example_supplement</a></span><span class="op">(</span><span class="op">)</span>, variation <span class="op">=</span> <span class="fl">0.2</span><span class="op">)</span></span>
-<span><span class="co">#&gt;         input value total_low total_high      swing  rel_swing</span></span>
-<span><span class="co">#&gt; 1   impact:d3  7.50  1.844070   2.374387 0.53031715 0.25142703</span></span>
-<span><span class="co">#&gt; 2     prob:d3  0.20  1.851628   2.374637 0.52300893 0.24796215</span></span>
-<span><span class="co">#&gt; 3   impact:d2  5.00  1.998423   2.220035 0.22161264 0.10506809</span></span>
-<span><span class="co">#&gt; 4     prob:d2  0.15  2.026335   2.197276 0.17094138 0.08104449</span></span>
-<span><span class="co">#&gt; 5 assoc:d2:d3  3.00  2.170224   2.062015 0.10820854 0.05130242</span></span>
-<span><span class="co">#&gt; 6   impact:d1  2.50  2.063348   2.155110 0.09176175 0.04350488</span></span>
-<span><span class="co">#&gt; 7     prob:d1  0.10  2.069218   2.149697 0.08047878 0.03815555</span></span>
-<span><span class="co">#&gt; 8 assoc:d1:d3  1.00  2.138876   2.084124 0.05475254 0.02595856</span></span>
-<span><span class="co">#&gt; 9 assoc:d1:d2  2.00  2.127728   2.093846 0.03388228 0.01606382</span></span></code></pre></div>
+<span><span class="co">#&gt;            input value total_low total_high      swing  rel_swing</span></span>
+<span><span class="co">#&gt; 1      impacts:3  7.50  1.844070   2.374387 0.53031715 0.25142703</span></span>
+<span><span class="co">#&gt; 2        prob:d3  0.20  1.851628   2.374637 0.52300893 0.24796215</span></span>
+<span><span class="co">#&gt; 3      impacts:2  5.00  1.998423   2.220035 0.22161264 0.10506809</span></span>
+<span><span class="co">#&gt; 4        prob:d2  0.15  2.026335   2.197276 0.17094138 0.08104449</span></span>
+<span><span class="co">#&gt; 5 associations:3  3.00  2.170224   2.062015 0.10820854 0.05130242</span></span>
+<span><span class="co">#&gt; 6      impacts:1  2.50  2.063348   2.155110 0.09176175 0.04350488</span></span>
+<span><span class="co">#&gt; 7        prob:d1  0.10  2.069218   2.149697 0.08047878 0.03815555</span></span>
+<span><span class="co">#&gt; 8 associations:2  1.00  2.138876   2.084124 0.05475254 0.02595856</span></span>
+<span><span class="co">#&gt; 9 associations:1  2.00  2.127728   2.093846 0.03388228 0.01606382</span></span></code></pre></div>
 <p>Screening associations, including pairs with no estimate, finds those
 worth estimating. Specified associations are multiplied by each of
 <code>multipliers</code>; pairs without an estimate (here d1 and d3) are
 set to each of <code>or_values</code>:</p>
-<div class="sourceCode" id="cb17"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb18"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">m_pairs</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/cm_model.html">cm_model</a></span><span class="op">(</span></span>
 <span>  <span class="fu"><a href="../reference/cm_diseases.html">cm_diseases</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"d1"</span>, <span class="st">"d2"</span>, <span class="st">"d3"</span><span class="op">)</span>, <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="fl">0.10</span>, <span class="fl">0.15</span>, <span class="fl">0.20</span><span class="op">)</span><span class="op">)</span>,</span>
 <span>  <span class="fu"><a href="../reference/cm_impacts.html">cm_impacts</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"d1"</span>, <span class="st">"d2"</span>, <span class="st">"d3"</span><span class="op">)</span>, <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="fl">2.5</span>, <span class="fl">5</span>, <span class="fl">7.5</span><span class="op">)</span><span class="op">)</span>,</span>
@@ -474,7 +512,7 @@ set to each of <code>or_values</code>:</p>
 column <code>failed</code>, rather than skipping them. Here, weakening
 any of the three strong associations above makes the pairs jointly
 infeasible:</p>
-<div class="sourceCode" id="cb18"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb19"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="fu"><a href="../reference/screen_associations.html">screen_associations</a></span><span class="op">(</span><span class="va">strong</span>, multipliers <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="fl">0.05</span>, <span class="fl">2</span><span class="op">)</span><span class="op">)</span></span>
 <span><span class="co">#&gt; &lt;cm_screen&gt; 6 scenarios; baseline total 3.305</span></span>
 <span><span class="co">#&gt;  pair    status  scenario total  change rel_change max_rank_shift rank_corr</span></span>

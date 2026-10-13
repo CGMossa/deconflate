@@ -5,15 +5,11 @@
 - [`cm_diseases()`](https://rasmussenphilip.github.io/deconflate/reference/cm_diseases.md)
   : Describe the diseases in a system
 - [`cm_associations()`](https://rasmussenphilip.github.io/deconflate/reference/cm_associations.md)
-  : Describe statistical associations between disease pairs
-- [`cm_three_way()`](https://rasmussenphilip.github.io/deconflate/reference/cm_three_way.md)
-  : Describe three-way disease associations (scenarios)
+  : Describe associations between diseases
 - [`cm_population()`](https://rasmussenphilip.github.io/deconflate/reference/cm_population.md)
   : Describe the population: diseases and their associations
 - [`cm_impacts()`](https://rasmussenphilip.github.io/deconflate/reference/cm_impacts.md)
   : Describe raw impact estimates
-- [`cm_interactions()`](https://rasmussenphilip.github.io/deconflate/reference/cm_interactions.md)
-  : Describe pairwise impact interactions
 - [`cm_model()`](https://rasmussenphilip.github.io/deconflate/reference/cm_model.md)
   : Combine a population with an impact table
 - [`set_association()`](https://rasmussenphilip.github.io/deconflate/reference/set_association.md)
@@ -21,7 +17,7 @@
 - [`set_interaction()`](https://rasmussenphilip.github.io/deconflate/reference/set_interaction.md)
   : Set or replace one pairwise interaction
 - [`set_three_way()`](https://rasmussenphilip.github.io/deconflate/reference/set_three_way.md)
-  : Set or replace one three-way association term
+  : Set or replace one three-way association
 
 ## Reading inputs
 
@@ -39,7 +35,7 @@
 - [`deconflate()`](https://rasmussenphilip.github.io/deconflate/reference/deconflate.md)
   : Adjust raw impact estimates for comorbidity
 - [`compare_methods()`](https://rasmussenphilip.github.io/deconflate/reference/compare_methods.md)
-  : Compare adjustment methods
+  : Compare the model with the published approximation
 - [`pair_tables()`](https://rasmussenphilip.github.io/deconflate/reference/pair_tables.md)
   : Pairwise 2x2 tables for every disease pair
 - [`excess_matrix()`](https://rasmussenphilip.github.io/deconflate/reference/excess_matrix.md)

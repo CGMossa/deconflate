@@ -1,19 +1,16 @@
 # Describe the population: diseases and their associations
 
-A population holds the disease probabilities, the pairwise associations
-and, optionally, three-way association scenarios. Combine it with one
-impact table in
+A population holds the disease probabilities and the association rows.
+Combine it with one impact table in
 [`cm_model()`](https://rasmussenphilip.github.io/deconflate/reference/cm_model.md).
+Every row is checked against the diseases (see
+[`cm_associations()`](https://rasmussenphilip.github.io/deconflate/reference/cm_associations.md)
+for what a row means).
 
 ## Usage
 
 ``` r
-cm_population(
-  diseases,
-  associations = NULL,
-  three_way = NULL,
-  adjusted_associations = c("error", "use_as_marginal")
-)
+cm_population(diseases, associations = NULL, ...)
 ```
 
 ## Arguments
@@ -34,28 +31,13 @@ cm_population(
   [`screen_associations()`](https://rasmussenphilip.github.io/deconflate/reference/screen_associations.md))
   also run without any.
 
-- three_way:
+- ...:
 
-  Optional
-  [`cm_three_way()`](https://rasmussenphilip.github.io/deconflate/reference/cm_three_way.md)
-  object.
-
-- adjusted_associations:
-
-  Covariate-adjusted association measures are not marginal 2x2
-  associations. `"error"` (default) rejects them; `"use_as_marginal"`
-  uses them as if they were marginal, which is an approximation, and
-  records this.
+  Not used (arguments of earlier versions give a message).
 
 ## Value
 
 A `cm_population` object.
-
-## Details
-
-Pairs without an association are unknown: the global model fills in
-their association from the others (see
-[`fit_joint()`](https://rasmussenphilip.github.io/deconflate/reference/fit_joint.md)).
 
 ## Examples
 
@@ -67,5 +49,6 @@ pop <- cm_population(
 pop
 #> <cm_population>
 #>   Diseases: 3 (d1, d2, d3)
-#>   Disease pairs: 3 (2 with an association, 1 unknown)
+#>   Association rows: 2 (OR: 2)
+#>   Disease pairs: 3 (2 with a crude pair row, 1 unknown)
 ```

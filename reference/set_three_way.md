@@ -1,6 +1,11 @@
-# Set or replace one three-way association term
+# Set or replace one three-way association
 
-Set or replace one three-way association term
+Sets how much `disease3` changes the association of `disease1` and
+`disease2`: an `OR_ratio` row (the odds ratio of disease1 and disease2
+among animals with disease3, divided by that among animals without it;
+see
+[`cm_associations()`](https://rasmussenphilip.github.io/deconflate/reference/cm_associations.md)).
+Replaces such a row if present.
 
 ## Usage
 
@@ -23,10 +28,8 @@ set_three_way(model, disease1, disease2, disease3, ratio)
 
 - ratio:
 
-  Ratio of conditional odds ratios (see
-  [`cm_three_way()`](https://rasmussenphilip.github.io/deconflate/reference/cm_three_way.md)).
+  Positive ratio of the two odds ratios.
 
 ## Value
 
-The modified object. A distribution of the triple's ratio in the model's
-`distributions` is dropped (the scenario value is fixed).
+The modified object. Distributions of replaced rows are dropped.

@@ -1,9 +1,11 @@
 # Screen disease pairs for influential impact interactions
 
-Adds a pairwise interaction of each size in `values` to each disease
-pair, one at a time, re-runs the global adjustment and reports the
-change in the aggregate and rankings. The joint distribution is fitted
-once and reused. Interactions apply to additive impacts only.
+Sets the interaction of each disease pair to each size in `values`, one
+at a time (see
+[`set_interaction()`](https://rasmussenphilip.github.io/deconflate/reference/set_interaction.md)),
+re-runs the adjustment and reports the change in the aggregate and
+rankings. The joint distribution is fitted once and reused. For additive
+impacts.
 
 ## Usage
 

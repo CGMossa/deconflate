@@ -29,7 +29,7 @@ point values. The files are:"></head><body>
     <li><a class="dropdown-item" href="../articles/thresholds-and-scaling.html">Threshold searches and many diseases</a></li>
     <li><a class="dropdown-item" href="../articles/event-impacts.html">Event impacts (culling and mortality)</a></li>
     <li><a class="dropdown-item" href="../articles/reproducing-published.html">Reproducing the published analyses</a></li>
-    <li><a class="dropdown-item" href="../articles/interactions.html">Disease combinations, interactions and attribution</a></li>
+    <li><a class="dropdown-item" href="../articles/interactions.html">Disease combinations, subgroups and interactions</a></li>
     <li><a class="dropdown-item" href="../articles/uncertainty.html">Uncertainty and sensitivity</a></li>
   </ul></li>
 <li class="nav-item"><a class="nav-link" href="../news/index.html">Changelog</a></li>
@@ -84,24 +84,22 @@ point values. The files are:</p>
 <li><p><code>associations.csv</code>: their associations (odds ratios);</p></li>
 <li><p><code>yield.csv</code>: additive impacts on milk yield, in percent of yield (any
 units can be used);</p></li>
-<li><p><code>yield_interactions.csv</code>: an empty interactions table for the yield
-impacts (pairwise interactions in the same units);</p></li>
 <li><p><code>culling.csv</code>: event impacts on culling (hazard ratios and a risk ratio),
-for <code>deconflate(..., event_model = TRUE, overall_risk = ...)</code>;</p></li>
-<li><p><code>three_way.csv</code>: an empty three-way table.</p></li>
-</ul><p>The folder <code>system.file("extdata", "five_diseases", package = "deconflate")</code> has a fuller example that uses every feature.</p>
+for <code>deconflate(..., event_model = TRUE, overall_risk = ...)</code>.</p></li>
+</ul><p>The folder <code>system.file("extdata", "five_diseases", package = "deconflate")</code> has a fuller example that uses every feature (several
+rows per item, subgroups, adjusted rows, combinations).</p>
     </div>
 
     <div class="section level2">
     <h2 id="ref-examples">Examples<a class="anchor" aria-label="anchor" href="#ref-examples"></a></h2>
     <div class="sourceCode"><pre class="sourceCode r"><code><span class="r-in"><span><span class="va">dir</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/file.path.html" class="external-link">file.path</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/tempfile.html" class="external-link">tempdir</a></span><span class="op">(</span><span class="op">)</span>, <span class="st">"my-inputs"</span><span class="op">)</span></span></span>
 <span class="r-in"><span><span class="fu">cm_template</span><span class="op">(</span><span class="va">dir</span>, overwrite <span class="op">=</span> <span class="cn">TRUE</span><span class="op">)</span></span></span>
-<span class="r-msg co"><span class="r-pr">#&gt;</span> Wrote 6 files to /tmp/RtmpNxOcWp/my-inputs</span>
+<span class="r-msg co"><span class="r-pr">#&gt;</span> Wrote 4 files to /tmp/RtmpEx0sgC/my-inputs</span>
 <span class="r-in"><span><span class="va">yield</span> <span class="op">&lt;-</span> <span class="fu"><a href="cm_read_inputs.html">cm_read_inputs</a></span><span class="op">(</span>diseases <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/file.path.html" class="external-link">file.path</a></span><span class="op">(</span><span class="va">dir</span>, <span class="st">"diseases.csv"</span><span class="op">)</span>,</span></span>
 <span class="r-in"><span>                        associations <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/file.path.html" class="external-link">file.path</a></span><span class="op">(</span><span class="va">dir</span>, <span class="st">"associations.csv"</span><span class="op">)</span>,</span></span>
 <span class="r-in"><span>                        impacts <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/file.path.html" class="external-link">file.path</a></span><span class="op">(</span><span class="va">dir</span>, <span class="st">"yield.csv"</span><span class="op">)</span><span class="op">)</span></span></span>
 <span class="r-in"><span><span class="fu"><a href="deconflate.html">deconflate</a></span><span class="op">(</span><span class="va">yield</span>, n_draws <span class="op">=</span> <span class="fl">200</span>, seed <span class="op">=</span> <span class="fl">1</span><span class="op">)</span></span></span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> &lt;cm_result&gt; method: simultaneous; milk yield loss [% of yield]</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> &lt;cm_result&gt; pairwise shortcut; milk yield loss [% of yield]</span>
 <span class="r-out co"><span class="r-pr">#&gt;</span> </span>
 <span class="r-out co"><span class="r-pr">#&gt;</span>  disease  raw adjusted lower  upper   change</span>
 <span class="r-out co"><span class="r-pr">#&gt;</span>      LAM 4.81    2.871 0.600  4.697 -0.40320</span>
@@ -109,13 +107,13 @@ for <code>deconflate(..., event_model = TRUE, overall_risk = ...)</code>;</p></l
 <span class="r-out co"><span class="r-pr">#&gt;</span>      MET 5.61    3.170 2.302  4.010 -0.43496</span>
 <span class="r-out co"><span class="r-pr">#&gt;</span> </span>
 <span class="r-out co"><span class="r-pr">#&gt;</span> Raw sum: 4.966; adjusted total: 4.015 (95% interval 3.111 to 4.932)</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> Diagnostics: residual 1.78e-15, condition number 2, sign changes 0</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> Diagnostics: residual 0.00e+00, condition number 2, sign changes 0</span>
 <span class="r-out co"><span class="r-pr">#&gt;</span> Uncertainty: 95% intervals from 200 draws (0 rejected; random sampling; seed 1).</span>
 <span class="r-in"><span><span class="va">culling</span> <span class="op">&lt;-</span> <span class="fu"><a href="cm_read_inputs.html">cm_read_inputs</a></span><span class="op">(</span>diseases <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/file.path.html" class="external-link">file.path</a></span><span class="op">(</span><span class="va">dir</span>, <span class="st">"diseases.csv"</span><span class="op">)</span>,</span></span>
 <span class="r-in"><span>                          associations <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/file.path.html" class="external-link">file.path</a></span><span class="op">(</span><span class="va">dir</span>, <span class="st">"associations.csv"</span><span class="op">)</span>,</span></span>
 <span class="r-in"><span>                          impacts <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/file.path.html" class="external-link">file.path</a></span><span class="op">(</span><span class="va">dir</span>, <span class="st">"culling.csv"</span><span class="op">)</span><span class="op">)</span></span></span>
 <span class="r-in"><span><span class="fu"><a href="deconflate.html">deconflate</a></span><span class="op">(</span><span class="va">culling</span>, event_model <span class="op">=</span> <span class="cn">TRUE</span>, overall_risk <span class="op">=</span> <span class="fl">0.25</span>, n_draws <span class="op">=</span> <span class="fl">0</span><span class="op">)</span></span></span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> &lt;cm_event_result&gt; culling; method: snapshot</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> &lt;cm_event_result&gt; culling; snapshot</span>
 <span class="r-out co"><span class="r-pr">#&gt;</span> </span>
 <span class="r-out co"><span class="r-pr">#&gt;</span>  disease measure  raw adjusted_hr</span>
 <span class="r-out co"><span class="r-pr">#&gt;</span>      LAM      HR 1.74       1.514</span>
@@ -130,7 +128,7 @@ for <code>deconflate(..., event_model = TRUE, overall_risk = ...)</code>;</p></l
 <span class="r-out co"><span class="r-pr">#&gt;</span>      SCK     0.047051 0.64205</span>
 <span class="r-out co"><span class="r-pr">#&gt;</span>      MET     0.003936 0.05371</span>
 <span class="r-out co"><span class="r-pr">#&gt;</span> </span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> Diagnostics: residual 2.22e-16, condition number 2.2, sign changes 0</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> Diagnostics: residual 3.89e-16, condition number 2.2, sign changes 0</span>
 </code></pre></div>
     </div>
   </main><aside class="col-md-3"><nav id="toc" aria-label="Table of contents"><h2>On this page</h2>

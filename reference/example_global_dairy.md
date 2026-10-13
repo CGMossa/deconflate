@@ -35,9 +35,8 @@ A
 
 ## Details
 
-Pairs not in Table 3 are unknown, as for any input in this package, so
-[`deconflate()`](https://rasmussenphilip.github.io/deconflate/reference/deconflate.md)
-uses the global method. The 2024 analysis treated them as independent;
+Pairs not in Table 3 are unknown, as for any input in this package: the
+model fills them in. The 2024 analysis treated them as independent;
 [`reproduce_rasmussen_2024()`](https://rasmussenphilip.github.io/deconflate/reference/reproduce.md)
 does the same.
 
@@ -59,8 +58,8 @@ zero.
 
 ## Culling
 
-`outcome = "culling"` gives the hazard ratios as event impacts (estimand
-`"snapshot_crude"`, an assumption), for
+`outcome = "culling"` gives the hazard ratios as event impacts (crude
+snapshot comparisons, an assumption), for
 `deconflate(..., event_model = TRUE, overall_risk = 0.2366)` (the global
 culling risk of the 2024 analysis). The 2024 analysis adjusted hazard
 ratios minus 1 as if they were additive impacts; that historical
@@ -72,8 +71,8 @@ calculation is only available inside
 ``` r
 gd <- example_global_dairy()
 deconflate(gd, n_draws = 0)
-#> Warning: Adjusted impacts change sign for CK, CM, DA, MF. The raw impacts are smaller than the associated diseases alone would produce under the additive model; check the estimands, and whether the estimates come from populations with different comorbidity patterns.
-#> <cm_result> method: global; milk yield loss [% decrease]
+#> Warning: Adjusted impacts change sign for CK, CM, DA, MF. The raw impacts are smaller than the associated diseases alone would produce under the additive model; check the estimates, and whether they come from populations with different comorbidity patterns.
+#> <cm_result> full model; milk yield loss [% decrease]
 #> 
 #>  disease    raw adjusted    change
 #>       CK 0.4322  -5.0307 -12.64000
@@ -90,17 +89,13 @@ deconflate(gd, n_draws = 0)
 #>      SCM 6.2932   5.9495  -0.05461
 #> 
 #> Raw sum: 9.931; adjusted total: 6.915
-#> Diagnostics: residual 1.78e-15, condition number 3.24, sign changes 4 (CK, CM, DA, MF)
-#> Unknown pairs: 28 without an association; the global fit gave them odds ratios from 1.08 to 2.37 (see $unknown_pairs).
-#> 
-#> Notes:
-#> * The global method was used because of 28 pairs without an association
-#>   (unknown).
+#> Diagnostics: residual 2.22e-16, condition number 3.24, sign changes 4 (CK, CM, DA, MF)
+#> Unknown pairs: 28 without an association; the fit gave them odds ratios from 1.08 to 2.37 (see $unknown_pairs).
 # \donttest{
 deconflate(example_global_dairy("culling"), event_model = TRUE,
            overall_risk = 0.2366, n_draws = 0)
-#> Warning: Adjusted hazard ratios are on the other side of 1 from the raw estimates for CK, DYS, MET. The raw estimates are weaker than the associated diseases alone would produce; check the estimands and source populations.
-#> <cm_event_result> culling; method: snapshot
+#> Warning: Adjusted hazard ratios are on the other side of 1 from the raw estimates for CK, DYS, MET. The raw estimates are weaker than the associated diseases alone would produce; check the estimates and source populations.
+#> <cm_event_result> culling; snapshot
 #> 
 #>  disease measure   raw adjusted_hr
 #>       CK      HR 1.500      0.9771
@@ -133,7 +128,7 @@ deconflate(example_global_dairy("culling"), event_model = TRUE,
 #>      SCK    0.0341130  0.313999
 #>      SCM    0.0099293  0.091396
 #> 
-#> Diagnostics: residual 7.33e-15, condition number 3.82, sign changes 3 (CK, DYS, MET)
-#> Unknown pairs: 28 without an association; the global fit gave them odds ratios from 1.08 to 2.37 (see $unknown_pairs).
+#> Diagnostics: residual 0.00e+00, condition number 3.82, sign changes 3 (CK, DYS, MET)
+#> Unknown pairs: 28 without an association; the fit gave them odds ratios from 1.08 to 2.37 (see $unknown_pairs).
 # }
 ```

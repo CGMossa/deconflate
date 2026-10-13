@@ -35,7 +35,7 @@ point estimates only)."></head><body>
     <li><a class="dropdown-item" href="../articles/thresholds-and-scaling.html">Threshold searches and many diseases</a></li>
     <li><a class="dropdown-item" href="../articles/event-impacts.html">Event impacts (culling and mortality)</a></li>
     <li><a class="dropdown-item" href="../articles/reproducing-published.html">Reproducing the published analyses</a></li>
-    <li><a class="dropdown-item" href="../articles/interactions.html">Disease combinations, interactions and attribution</a></li>
+    <li><a class="dropdown-item" href="../articles/interactions.html">Disease combinations, subgroups and interactions</a></li>
     <li><a class="dropdown-item" href="../articles/uncertainty.html">Uncertainty and sensitivity</a></li>
   </ul></li>
 <li class="nav-item"><a class="nav-link" href="../news/index.html">Changelog</a></li>
@@ -91,9 +91,9 @@ point estimates only).</p>
     </div>
     <div class="section level2">
     <h2 id="details">Details<a class="anchor" aria-label="anchor" href="#details"></a></h2>
-    <p>Pairs not in Table 3 are unknown, as for any input in this package, so
-<code><a href="deconflate.html">deconflate()</a></code> uses the global method. The 2024 analysis treated them as
-independent; <code><a href="reproduce.html">reproduce_rasmussen_2024()</a></code> does the same.</p>
+    <p>Pairs not in Table 3 are unknown, as for any input in this package: the
+model fills them in. The 2024 analysis treated them as independent;
+<code><a href="reproduce.html">reproduce_rasmussen_2024()</a></code> does the same.</p>
     </div>
     <div class="section level2">
     <h2 id="two-versions-of-the-inputs">Two versions of the inputs<a class="anchor" aria-label="anchor" href="#two-versions-of-the-inputs"></a></h2>
@@ -114,8 +114,8 @@ zero.</p>
     <h2 id="culling">Culling<a class="anchor" aria-label="anchor" href="#culling"></a></h2>
 
 
-<p><code>outcome = "culling"</code> gives the hazard ratios as event impacts (estimand
-<code>"snapshot_crude"</code>, an assumption), for
+<p><code>outcome = "culling"</code> gives the hazard ratios as event impacts (crude
+snapshot comparisons, an assumption), for
 <code>deconflate(..., event_model = TRUE, overall_risk = 0.2366)</code> (the global
 culling risk of the 2024 analysis). The 2024 analysis adjusted hazard
 ratios minus 1 as if they were additive impacts; that historical
@@ -126,8 +126,8 @@ calculation is only available inside <code><a href="reproduce.html">reproduce_ra
     <h2 id="ref-examples">Examples<a class="anchor" aria-label="anchor" href="#ref-examples"></a></h2>
     <div class="sourceCode"><pre class="sourceCode r"><code><span class="r-in"><span><span class="va">gd</span> <span class="op">&lt;-</span> <span class="fu">example_global_dairy</span><span class="op">(</span><span class="op">)</span></span></span>
 <span class="r-in"><span><span class="fu"><a href="deconflate.html">deconflate</a></span><span class="op">(</span><span class="va">gd</span>, n_draws <span class="op">=</span> <span class="fl">0</span><span class="op">)</span></span></span>
-<span class="r-wrn co"><span class="r-pr">#&gt;</span> <span class="warning">Warning: </span>Adjusted impacts change sign for CK, CM, DA, MF. The raw impacts are smaller than the associated diseases alone would produce under the additive model; check the estimands, and whether the estimates come from populations with different comorbidity patterns.</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> &lt;cm_result&gt; method: global; milk yield loss [% decrease]</span>
+<span class="r-wrn co"><span class="r-pr">#&gt;</span> <span class="warning">Warning: </span>Adjusted impacts change sign for CK, CM, DA, MF. The raw impacts are smaller than the associated diseases alone would produce under the additive model; check the estimates, and whether they come from populations with different comorbidity patterns.</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> &lt;cm_result&gt; full model; milk yield loss [% decrease]</span>
 <span class="r-out co"><span class="r-pr">#&gt;</span> </span>
 <span class="r-out co"><span class="r-pr">#&gt;</span>  disease    raw adjusted    change</span>
 <span class="r-out co"><span class="r-pr">#&gt;</span>       CK 0.4322  -5.0307 -12.64000</span>
@@ -144,17 +144,13 @@ calculation is only available inside <code><a href="reproduce.html">reproduce_ra
 <span class="r-out co"><span class="r-pr">#&gt;</span>      SCM 6.2932   5.9495  -0.05461</span>
 <span class="r-out co"><span class="r-pr">#&gt;</span> </span>
 <span class="r-out co"><span class="r-pr">#&gt;</span> Raw sum: 9.931; adjusted total: 6.915</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> Diagnostics: residual 1.78e-15, condition number 3.24, sign changes 4 (CK, CM, DA, MF)</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> Unknown pairs: 28 without an association; the global fit gave them odds ratios from 1.08 to 2.37 (see $unknown_pairs).</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> </span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> Notes:</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> * The global method was used because of 28 pairs without an association</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span>   (unknown).</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> Diagnostics: residual 2.22e-16, condition number 3.24, sign changes 4 (CK, CM, DA, MF)</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> Unknown pairs: 28 without an association; the fit gave them odds ratios from 1.08 to 2.37 (see $unknown_pairs).</span>
 <span class="r-in"><span><span class="co"># \donttest{</span></span></span>
 <span class="r-in"><span><span class="fu"><a href="deconflate.html">deconflate</a></span><span class="op">(</span><span class="fu">example_global_dairy</span><span class="op">(</span><span class="st">"culling"</span><span class="op">)</span>, event_model <span class="op">=</span> <span class="cn">TRUE</span>,</span></span>
 <span class="r-in"><span>           overall_risk <span class="op">=</span> <span class="fl">0.2366</span>, n_draws <span class="op">=</span> <span class="fl">0</span><span class="op">)</span></span></span>
-<span class="r-wrn co"><span class="r-pr">#&gt;</span> <span class="warning">Warning: </span>Adjusted hazard ratios are on the other side of 1 from the raw estimates for CK, DYS, MET. The raw estimates are weaker than the associated diseases alone would produce; check the estimands and source populations.</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> &lt;cm_event_result&gt; culling; method: snapshot</span>
+<span class="r-wrn co"><span class="r-pr">#&gt;</span> <span class="warning">Warning: </span>Adjusted hazard ratios are on the other side of 1 from the raw estimates for CK, DYS, MET. The raw estimates are weaker than the associated diseases alone would produce; check the estimates and source populations.</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> &lt;cm_event_result&gt; culling; snapshot</span>
 <span class="r-out co"><span class="r-pr">#&gt;</span> </span>
 <span class="r-out co"><span class="r-pr">#&gt;</span>  disease measure   raw adjusted_hr</span>
 <span class="r-out co"><span class="r-pr">#&gt;</span>       CK      HR 1.500      0.9771</span>
@@ -187,8 +183,8 @@ calculation is only available inside <code><a href="reproduce.html">reproduce_ra
 <span class="r-out co"><span class="r-pr">#&gt;</span>      SCK    0.0341130  0.313999</span>
 <span class="r-out co"><span class="r-pr">#&gt;</span>      SCM    0.0099293  0.091396</span>
 <span class="r-out co"><span class="r-pr">#&gt;</span> </span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> Diagnostics: residual 7.33e-15, condition number 3.82, sign changes 3 (CK, DYS, MET)</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> Unknown pairs: 28 without an association; the global fit gave them odds ratios from 1.08 to 2.37 (see $unknown_pairs).</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> Diagnostics: residual 0.00e+00, condition number 3.82, sign changes 3 (CK, DYS, MET)</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> Unknown pairs: 28 without an association; the fit gave them odds ratios from 1.08 to 2.37 (see $unknown_pairs).</span>
 <span class="r-in"><span><span class="co"># }</span></span></span>
 </code></pre></div>
     </div>

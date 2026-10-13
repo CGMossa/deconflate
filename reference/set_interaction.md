@@ -1,6 +1,10 @@
 # Set or replace one pairwise interaction
 
-Set or replace one pairwise interaction
+Sets the interaction of two diseases to `value` (in the units of the
+impacts): a row for the combination adjusted for `all`, which is the
+interaction itself (see
+[`cm_impacts()`](https://rasmussenphilip.github.io/deconflate/reference/cm_impacts.md)).
+Replaces such a row if present.
 
 ## Usage
 
@@ -25,5 +29,4 @@ set_interaction(model, disease1, disease2, value)
 
 ## Value
 
-The modified model. A distribution of the pair's interaction in the
-model's `distributions` is dropped (the scenario value is fixed).
+The modified model. Distributions of replaced rows are dropped.
