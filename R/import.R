@@ -82,7 +82,9 @@
 #' @param ... Not used (arguments of earlier versions give a message).
 #' @return A [cm_model()], with the distributions of uncertain values in
 #'   `$distributions` (keyed by table and row, e.g. `"associations:3"`) and
-#'   any notes from the checks in attribute `"problems"`.
+#'   any notes from the checks in attribute `"problems"`. When a check finds
+#'   an error, the error (class `deconflate_input_problems`) holds every
+#'   problem found in `$problems`, as [cm_check_inputs()] returns them.
 #' @export
 #' @examples
 #' dir <- file.path(tempdir(), "deconflate-inputs")
@@ -120,7 +122,7 @@ cm_read_inputs <- function(diseases, associations = NULL, impacts, ...) {
   pr <- chk$problems
   if (any(pr$severity == "error")) {
     cm_abort(format_problems(pr[pr$severity == "error", , drop = FALSE]),
-             class = "deconflate_input_problems")
+             class = "deconflate_input_problems", problems = pr)
   }
   if (nrow(pr)) message(format_problems(pr))
   m <- chk$model

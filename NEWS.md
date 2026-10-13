@@ -7,6 +7,16 @@ model and one input layout, in which a row can be about a combination of
 diseases or a subgroup, crude or adjusted, and several rows can describe
 the same thing.
 
+## Errors and warnings
+
+* Errors and warnings about particular inputs hold them as fields, so code
+  can use them without reading the message (see `?deconflate`, "Errors and
+  warnings"): `table` and `row` or `rows` (with `residuals` for
+  contradicting impact rows), `terms`, `triples`, `pairs` and `residual`.
+  The error of `cm_read_inputs()` (class `deconflate_input_problems`) holds
+  every problem found in `$problems`, and the warning of an incomplete
+  Shapley allocation holds `skipped_mass`, `skipped_loss` and `total`.
+
 ## Breaking changes: one model, one input layout
 
 * **One model.** The `method` argument is removed from `deconflate()`,

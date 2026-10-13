@@ -149,7 +149,7 @@ fit_joint_at <- function(model, tol = 1e-10, max_iter = 10000L, max_diseases = 2
   if (!fit$converged) {
     cm_warn(sprintf(
       "The joint distribution did not converge after %d sweeps (max residual %.2e). The association rows may not be able to hold together; see check_feasibility().",
-      fit$iterations, fit$residual), class = "deconflate_nonconvergence")
+      fit$iterations, fit$residual), class = "deconflate_nonconvergence", residual = fit$residual)
   }
   structure(list(cells = cells, prob = fit$prob, diseases = ids,
                  converged = fit$converged, iterations = fit$iterations, max_residual = fit$residual,
@@ -435,7 +435,7 @@ fit_joint_sampled <- function(model, ids, p, cons, targets, tol, max_iter, n_sam
       "The sampled joint distribution is unresolved (calibration %s; sample residual %.2e; %s). This does not show that the inputs are infeasible; try more samples, chains or iterations, or check_feasibility().",
       if (fit_converged) "converged" else "did not converge", resid_raw,
       if (calibrate) sprintf("raking residual %.2e", cal$residual) else "no raking"),
-      class = "deconflate_nonconvergence")
+      class = "deconflate_nonconvergence", residual = resid_raw)
   }
   structure(list(cells = cells, prob = prob, diseases = ids, converged = converged,
                  iterations = it, max_residual = resid_final,
@@ -456,7 +456,7 @@ validate_joint <- function(joint, model, pool = "random") {
   if (!identical(joint$diseases, ids)) stale("different diseases or order")
   if (!isTRUE(joint$converged)) {
     cm_abort("The supplied joint distribution did not converge; its probabilities cannot be used.",
-             class = "deconflate_nonconvergence")
+             class = "deconflate_nonconvergence", residual = joint$max_residual)
   }
   tp <- joint$targets$prob
   if (is.null(tp) || length(tp) != length(ids) || max(abs(tp - model$diseases$prob)) > 1e-7) {

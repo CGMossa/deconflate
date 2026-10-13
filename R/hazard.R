@@ -74,7 +74,8 @@ adjust_event <- function(model, overall_risk, joint, warn = TRUE, allocate = TRU
     sign(theta) != raw_dir
   if (warn && any(sign_change)) {
     cm_warn(sprintf("Adjusted hazard ratios are on the other side of 1 from the raw estimates for %s. The raw estimates are weaker than the associated diseases alone would produce; check the estimates and source populations.",
-                    paste(terms[sign_change], collapse = ", ")), class = "deconflate_sign_change")
+                    paste(terms[sign_change], collapse = ", ")), class = "deconflate_sign_change",
+            terms = terms[sign_change])
   }
   attributable <- event_attributable(theta, joint, overall_risk, members, allocate = allocate)
   estimates <- data.frame(table = "impacts", row = vapply(specs, `[[`, numeric(1), "row"),
@@ -140,7 +141,7 @@ event_row_setup <- function(s, cells, prob, members) {
     cm_abort(sprintf("%s: the estimate is not identifiable: no %s contains animals with %s and without %s.",
                      s$where, if (s$adjusted) "stratum of its adjustment set" else "part of the population",
                      if (k > 1L) "every combination of its diseases" else "the disease", if (k > 1L) "them" else "it"),
-             class = "deconflate_singular")
+             class = "deconflate_singular", table = "impacts", row = s$row)
   }
   keep <- st %in% ok_st
   codes <- codes[keep]
@@ -225,7 +226,7 @@ solve_event_rows <- function(eval_F, start, se, exact, labels, terms, tol = 1e-1
   resid <- if (any(exact)) max(abs(f[exact])) else 0
   if (!is.finite(resid) || resid > 1e-8 || !all(is.finite(f))) {
     cm_abort(sprintf("Could not solve the snapshot model (max residual of the exact rows %.2e): the estimates may be incompatible with the overall risk or with each other.", resid),
-             class = "deconflate_nonconvergence")
+             class = "deconflate_nonconvergence", residual = resid)
   }
   df <- m - k
   std <- ifelse(exact, NA_real_, f / se)
@@ -265,12 +266,12 @@ adjust_event_pairwise <- function(model, method = c("first_order", "published"),
     cm_abort(sprintf("The %s method needs a crude pair row for every pair (missing: %s); the snapshot model fills unknown pairs in.",
                      if (method == "published") "published" else "first-order",
                      paste(utils::head(paste(pt$disease1, pt$disease2, sep = "-")[is.na(pt$p11)], 5), collapse = ", ")),
-             class = c("deconflate_unknown_pairs", "deconflate_unsupported"))
+             class = c("deconflate_unknown_pairs", "deconflate_unsupported"), pairs = missing_pairs(pt))
   }
   P <- stats::setNames(model$diseases$prob, ids)
   tri <- triple_screen(pt, P)
   if (nrow(tri)) cm_abort("The pairwise associations are jointly infeasible; see check_feasibility().",
-                          class = "deconflate_infeasible")
+                          class = "deconflate_infeasible", triples = tri)
   J <- pairwise_joint_matrix(pt, ids, P)
   A <- pairwise_coefficients(pair_covariance(J), specs, ids)
   v <- vapply(specs, `[[`, numeric(1), "value")
@@ -340,7 +341,7 @@ event_joint <- function(pop, joint, joint_start = NULL, pool = "random", frozen 
     } else {
       sprintf("The joint distribution did not converge (max residual %.2e): the association rows may not be able to hold together; see check_feasibility().",
               joint$max_residual)
-    }, class = "deconflate_nonconvergence")
+    }, class = "deconflate_nonconvergence", residual = joint$max_residual)
   }
   joint
 }

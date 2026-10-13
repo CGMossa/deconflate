@@ -87,7 +87,7 @@ association_spec <- function(a, ids) {
   if (adjusted) {
     if (m != "OR" || length(g) != 1L || length(h) != 1L) {
       cm_abort(sprintf("%s: an adjusted association must be an odds ratio between two single diseases (measure OR).", where),
-               class = "deconflate_unsupported")
+               class = "deconflate_unsupported", table = "associations", row = a$row)
     }
   }
   if (m == "OR_ratio") {
@@ -98,7 +98,8 @@ association_spec <- function(a, ids) {
       cm_abort(sprintf("%s: OR_ratio needs one disease in `among` (present, e.g. 'SCK', or absent, 'no SCK').", where))
     }
     if (length(adj$diseases) || adj$all) {
-      cm_abort(sprintf("%s: OR_ratio rows cannot be adjusted for other diseases.", where), class = "deconflate_unsupported")
+      cm_abort(sprintf("%s: OR_ratio rows cannot be adjusted for other diseases.", where), class = "deconflate_unsupported",
+               table = "associations", row = a$row)
     }
   }
   # The OR_ratio is the same quantity whichever of its three diseases is the
@@ -302,7 +303,10 @@ adjusted_shift <- function(s, ctx) {
   X <- cbind(1, cells[A, c(s$h, s$adj), drop = FALSE])
   # Columns constant within the subgroup carry no information.
   keep <- c(TRUE, apply(X[, -1, drop = FALSE], 2, function(x) stats::var(x) > 0))
-  if (!keep[2]) cm_abort(sprintf("%s: the comparison is constant within the subgroup.", s$where), class = "deconflate_singular")
+  if (!keep[2]) {
+    cm_abort(sprintf("%s: the comparison is constant within the subgroup.", s$where), class = "deconflate_singular",
+             table = "associations", row = s$row)
+  }
   X <- X[, keep, drop = FALSE]
   beta <- rep(0, ncol(X))
   for (it in seq_len(100L)) {
@@ -312,7 +316,7 @@ adjusted_shift <- function(s, ctx) {
     H <- crossprod(X * (w * mu * (1 - mu)), X)
     step <- tryCatch(solve(H, g), error = function(e) NULL)
     if (is.null(step)) cm_abort(sprintf("%s: the adjusted odds ratio is not identifiable in this population.", s$where),
-                                class = "deconflate_singular")
+                                class = "deconflate_singular", table = "associations", row = s$row)
     beta <- beta + as.vector(step)
     if (max(abs(step)) < 1e-12) break
   }
@@ -346,7 +350,7 @@ ratio_target <- function(s, v, ctx) {
   eps <- 1e-12 * max(hi - lo, 1e-300)
   if (!(hi - lo > 2 * eps)) {
     cm_abort(sprintf("%s: no joint distribution has this odds ratio ratio with the other inputs.", s$where),
-             class = "deconflate_infeasible")
+             class = "deconflate_infeasible", table = "associations", row = s$row)
   }
   stats::uniroot(f, c(lo + eps, hi - eps), tol = 1e-15, maxiter = 1000L)$root
 }
@@ -550,7 +554,7 @@ fit_events <- function(model, cells, prob, groups, tol = 1e-10, max_iter = 10000
     if (inherits(info, "condition")) {
       # A conversion is impossible at the current fit: if it is at the
       # start, the inputs are infeasible; later, the fit has gone astray.
-      cm_abort(conditionMessage(info), class = "deconflate_infeasible")
+      stop(info)
     }
     new_t <- vapply(info, `[[`, numeric(1), "target")
     moved <- if (length(targets)) max(abs(new_t - targets), 0) else Inf
@@ -591,7 +595,8 @@ check_exact_rows <- function(groups, pooling) {
       off <- abs(info$z[exact] - info$estimate) > 1e-6 * max(1, abs(info$estimate))
       if (any(off)) {
         cm_abort(sprintf("Association rows %s describe the same quantity (%s) with different values and no uncertainty, so they cannot all hold. Give them distributions (they are then pooled), or keep one.",
-                         paste(gr$rows[exact], collapse = " and "), gr$label), class = "deconflate_infeasible")
+                         paste(gr$rows[exact], collapse = " and "), gr$label), class = "deconflate_infeasible",
+                 table = "associations", rows = gr$rows[exact])
       }
     }
   }

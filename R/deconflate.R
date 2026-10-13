@@ -101,6 +101,23 @@
 #' replaced; notes in `$notes` report a high rejection share and limited
 #' Monte Carlo precision. Without distributions, no draws are run.
 #'
+#' @section Errors and warnings:
+#' Errors and warnings are condition objects with classes (see
+#' [deconflate-package]). Those about particular inputs also hold them as
+#' fields, so that code can use them without reading the message:
+#' * `table` and `row` (or `rows`): the input rows concerned, e.g. an impact
+#'   row that is not identifiable, or exact rows that contradict each other
+#'   (with their `residuals` for impact rows);
+#' * `terms`: diseases and interactions, e.g. those the impact rows do not
+#'   determine (`deconflate_singular`), or those whose adjusted impact
+#'   changes sign (the warning `deconflate_sign_change`);
+#' * `triples`: the conflicting triples when the crude pair rows cannot all
+#'   hold (`deconflate_infeasible`), as in [check_feasibility()];
+#' * `pairs`: the pairs without a crude pair row, for the calculations that
+#'   need every pair (`deconflate_unknown_pairs`);
+#' * `residual`: how far a fit was from converging
+#'   (`deconflate_nonconvergence`).
+#'
 #' @param model A [cm_model()] (e.g. from [cm_read_inputs()]) with at least
 #'   one association.
 #' @param event_model `FALSE` (default) for additive impacts; `TRUE` for
@@ -184,6 +201,13 @@
 #'                  cm_impacts(c("d1", "d2", "d3"), c(1.5, 2.0, 1.2), measure = c("HR", "HR", "RR"),
 #'                             label = "culling"))
 #' deconflate(cull, event_model = TRUE, overall_risk = 0.25)
+#'
+#' # Errors hold the inputs they are about
+#' bad <- cm_model(cm_population(cm_diseases(c("a", "b", "c"), c(0.5, 0.5, 0.5)),
+#'                               cm_associations(c("a", "a", "b"), c("b", "c", "c"), c(20, 20, 0.05))),
+#'                 cm_impacts(c("a", "b", "c"), c(1, 1, 1)))
+#' e <- tryCatch(deconflate(bad), deconflate_infeasible = function(e) e)
+#' e$triples
 deconflate <- function(model, ...) UseMethod("deconflate")
 
 #' @export
@@ -316,7 +340,7 @@ run_point <- function(model, plan, risk = NULL, joint = NULL, warn = TRUE, dots 
     if (nrow(tri)) {
       cm_abort(sprintf("The associations cannot all hold together: no population has all of them (conflicting triples: %s). See check_feasibility().",
                        paste(utils::head(paste(tri$disease1, tri$disease2, tri$disease3, sep = "-"), 5),
-                             collapse = ", ")), class = "deconflate_infeasible")
+                             collapse = ", ")), class = "deconflate_infeasible", triples = tri)
     }
     res <- adjust_additive(model, pt = pt, warn = warn, frozen_se = frozen$impacts)
     res$pooling <- attr(pt, "pooling")
@@ -325,7 +349,7 @@ run_point <- function(model, plan, risk = NULL, joint = NULL, warn = TRUE, dots 
       jt <- tryCatch(do.call(event_joint, c(list(as_population(model), joint, pool = pool), fj)),
                      deconflate_nonconvergence = function(e) {
                        cm_abort(sprintf("The associations cannot all hold together: %s", conditionMessage(e)),
-                                class = "deconflate_infeasible")
+                                class = "deconflate_infeasible", residual = e$residual)
                      })
       res$joint <- jt
       res$diagnostics$feasibility <- sprintf("joint distribution fitted (max residual %.1e)", jt$max_residual)

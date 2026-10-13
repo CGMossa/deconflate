@@ -17,7 +17,9 @@ least one association).}
 \value{
 A \code{\link[=cm_model]{cm_model()}}, with the distributions of uncertain values in
 \verb{$distributions} (keyed by table and row, e.g. \code{"associations:3"}) and
-any notes from the checks in attribute \code{"problems"}.
+any notes from the checks in attribute \code{"problems"}. When a check finds
+an error, the error (class \code{deconflate_input_problems}) holds every
+problem found in \verb{$problems}, as \code{\link[=cm_check_inputs]{cm_check_inputs()}} returns them.
 }
 \description{
 Builds a model (\code{\link[=cm_model]{cm_model()}}) from three tables: the diseases, their

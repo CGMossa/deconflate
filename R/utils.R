@@ -10,12 +10,14 @@
 #   deconflate_nonconvergence  a numerical procedure did not converge
 #   deconflate_unsupported     an estimand/method combination that is not supported
 #   deconflate_nonfinite       non-finite results
-cm_abort <- function(msg, class = NULL) {
-  stop(errorCondition(msg, class = c(class, "deconflate_error"), call = NULL))
+# `...`: named fields of the condition (e.g. `rows`, `terms`), so that callers
+# can use what the message describes without parsing it.
+cm_abort <- function(msg, class = NULL, ...) {
+  stop(errorCondition(msg, ..., class = c(class, "deconflate_error"), call = NULL))
 }
 
-cm_warn <- function(msg, class = NULL) {
-  warning(warningCondition(msg, class = c(class, "deconflate_warning"),
+cm_warn <- function(msg, class = NULL, ...) {
+  warning(warningCondition(msg, ..., class = c(class, "deconflate_warning"),
                            call = NULL))
 }
 

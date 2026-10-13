@@ -21,7 +21,9 @@
 #'   (the cost grows as 2^k for a cell with k diseases). The default skips
 #'   nothing. Skipped cells are reported: their probability (`skipped_mass`)
 #'   and their expected loss (`skipped_loss`), which is the part of the total
-#'   that is not allocated.
+#'   that is not allocated. The warning (class
+#'   `deconflate_incomplete_allocation`) has the same values as fields
+#'   (`skipped_mass`, `skipped_loss`, `total`).
 #' @return A data frame with each disease's expected Shapley value and share
 #'   (of the allocated amount, which is the total only when no cell is
 #'   skipped), with attributes `total` (expected loss over all cells),
@@ -114,7 +116,8 @@ shapley_by_cell <- function(joint, loss, max_present = Inf) {
   attr(out, "skipped_loss") <- skipped_loss
   if (skipped > 0) {
     cm_warn(sprintf("Shapley allocation skipped combinations with more than %g diseases (probability %.3g); %.3g of the total %.3g is not allocated.",
-                    max_present, skipped, skipped_loss, total), class = "deconflate_incomplete_allocation")
+                    max_present, skipped, skipped_loss, total), class = "deconflate_incomplete_allocation",
+            skipped_mass = skipped, skipped_loss = skipped_loss, total = total)
   }
   out
 }

@@ -168,7 +168,8 @@ excess_matrix <- function(model) {
     unk <- paste(pt$disease1, pt$disease2, sep = "-")[is.na(pt$p11)]
     cm_abort(sprintf(
       "No crude pair row for %s: the excess matrix needs every pair. Give these pairs an association (an odds ratio of 1 if they are unrelated), or use deconflate(), which fills them in.",
-      paste(unk, collapse = ", ")), class = c("deconflate_unknown_pairs", "deconflate_unsupported"))
+      paste(unk, collapse = ", ")), class = c("deconflate_unknown_pairs", "deconflate_unsupported"),
+      pairs = missing_pairs(pt))
   }
   E <- matrix(0, length(ids), length(ids), dimnames = list(ids, ids))
   for (r in seq_len(nrow(pt))) {
@@ -176,6 +177,14 @@ excess_matrix <- function(model) {
     E[pt$disease1[r], pt$disease2[r]] <- pt$ep_1_given_2[r]
   }
   E
+}
+
+# Pairs of pair_tables() without a crude pair row (field `pairs` of the
+# deconflate_unknown_pairs errors).
+missing_pairs <- function(pt) {
+  out <- pt[is.na(pt$p11), c("disease1", "disease2"), drop = FALSE]
+  rownames(out) <- NULL
+  out
 }
 
 # n x n matrix of joint probabilities P(j and k) from pairwise tables
@@ -215,7 +224,7 @@ pairwise_coefficients <- function(Sigma, specs, ids) {
     rc <- if (!all(is.finite(sxx))) NA_real_ else if (length(X) == 1L) 1 else rcond(sxx)
     if (!is.finite(rc) || rc < 1e-10 || sxx[1, 1] <= 0) {
       cm_abort(sprintf("%s: the estimate is not identifiable: its adjustment set is (nearly) collinear with the disease in this population.",
-                       s$where), class = "deconflate_singular")
+                       s$where), class = "deconflate_singular", table = "impacts", row = s$row)
     }
     A[r, i] <- 1
     others <- setdiff(seq_len(n), X)
